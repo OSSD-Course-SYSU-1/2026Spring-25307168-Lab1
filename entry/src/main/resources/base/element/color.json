@@ -19,6 +19,14 @@
     {
       "name": "border_divider_color",
       "value": "#E8EBED"
+    },
+    {
+      "name": "primary",
+      "value": "#007DFF"
+    },
+    {
+      "name": "error",
+      "value": "#E84026"
     }
   ]
 }

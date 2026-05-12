@@ -63,6 +63,114 @@
     {
       "name": "distributed_data_sync_reason",
       "value": "Allow the permission for data exchange between different devices in distributed communication wheel scenarios."
+    },
+    {
+      "name": "template_manage_title",
+      "value": "Mail Templates"
+    },
+    {
+      "name": "template_edit_title",
+      "value": "Edit Template"
+    },
+    {
+      "name": "template_create_title",
+      "value": "New Template"
+    },
+    {
+      "name": "quick_reply_manage_title",
+      "value": "Quick Replies"
+    },
+    {
+      "name": "template_name_label",
+      "value": "Template Name:"
+    },
+    {
+      "name": "template_type_label",
+      "value": "Template Type:"
+    },
+    {
+      "name": "subject_template_label",
+      "value": "Subject Template:"
+    },
+    {
+      "name": "body_template_label",
+      "value": "Body Template:"
+    },
+    {
+      "name": "work_report_type",
+      "value": "Work Report"
+    },
+    {
+      "name": "leave_type",
+      "value": "Leave"
+    },
+    {
+      "name": "quotation_type",
+      "value": "Quotation"
+    },
+    {
+      "name": "custom_type",
+      "value": "Custom"
+    },
+    {
+      "name": "save_button",
+      "value": "Save"
+    },
+    {
+      "name": "delete_button",
+      "value": "Delete"
+    },
+    {
+      "name": "cancel_button",
+      "value": "Cancel"
+    },
+    {
+      "name": "confirm_delete_template",
+      "value": "Are you sure to delete this template?"
+    },
+    {
+      "name": "confirm_delete_reply",
+      "value": "Are you sure to delete this quick reply?"
+    },
+    {
+      "name": "template_name_empty_error",
+      "value": "Template name is required"
+    },
+    {
+      "name": "template_body_empty_error",
+      "value": "Template body is required"
+    },
+    {
+      "name": "template_name_duplicate_error",
+      "value": "Template name already exists in this type"
+    },
+    {
+      "name": "reply_content_empty_error",
+      "value": "Reply content is required"
+    },
+    {
+      "name": "reply_content_too_long_error",
+      "value": "Reply content must not exceed 200 characters"
+    },
+    {
+      "name": "reply_content_duplicate_error",
+      "value": "Reply content already exists"
+    },
+    {
+      "name": "no_template_hint",
+      "value": "No templates, tap + to create"
+    },
+    {
+      "name": "no_quick_reply_hint",
+      "value": "No quick replies, tap + to create"
+    },
+    {
+      "name": "template_select_hint",
+      "value": "Select Template"
+    },
+    {
+      "name": "quick_reply_label",
+      "value": "Quick Reply"
     }
   ]
 }

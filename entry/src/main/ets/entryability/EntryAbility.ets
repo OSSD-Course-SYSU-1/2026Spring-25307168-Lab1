@@ -13,28 +13,66 @@
 * limitations under the License.
 */
 
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, ConfigurationConstant, UIAbility, Want, common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { distributedDataObject } from '@kit.ArkData';
 import { window } from '@kit.ArkUI';
 import { JSON } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { MailInfoManager } from '../utils/MailInfoManager';
+import { MailTemplate } from '../model/MailTemplate';
+import { QuickReply } from '../model/QuickReply';
+import { TemplateManager } from '../utils/TemplateManager';
+import { QuickReplyManager } from '../utils/QuickReplyManager';
+import { DistributedSyncService, SyncDataObject } from '../utils/DistributedSyncService';
 
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   private distributedObject: distributedDataObject.DataObject | undefined = undefined;
+  private templateDistributedObject: distributedDataObject.DataObject | undefined = undefined;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
       hilog.info(DOMAIN, 'EntryAbility', '%{public}s', 'Ability onCreate');
+
+      // Initialize managers
+      this.initManagers();
+
       this.restoreDistributedObject(want, launchParam);
     } catch (error) {
       hilog.error(0x0000, 'EntryAbility', `getApplicationContext error. Code:${error.code},message: ${error.message}`);
       return error.code;
     }
+  }
+
+  /**
+   * Initialize TemplateManager, QuickReplyManager, and DistributedSyncService.
+   */
+  private async initManagers(): Promise<void> {
+    const context = this.context as common.UIAbilityContext;
+    const syncService: DistributedSyncService = DistributedSyncService.getInstance();
+    syncService.init(context);
+
+    const templateManager: TemplateManager = TemplateManager.getInstance();
+    await templateManager.init(context);
+
+    const quickReplyManager: QuickReplyManager = QuickReplyManager.getInstance();
+    await quickReplyManager.init(context);
+
+    // Register data restored callback
+    syncService.onDataRestored((templateData: string, quickReplyData: string) => {
+      hilog.info(DOMAIN, 'EntryAbility', 'Sync data restored callback triggered');
+      if (templateData && templateData.length > 0) {
+        templateManager.handleSyncData(templateData);
+      }
+      if (quickReplyData && quickReplyData.length > 0) {
+        quickReplyManager.handleSyncData(quickReplyData);
+      }
+    });
+
+    hilog.info(DOMAIN, 'EntryAbility', 'Managers initialized');
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -78,9 +116,53 @@ export default class EntryAbility extends UIAbility {
       this.distributedObject.setSessionId(sessionId).catch((err: BusinessError) => {
         hilog.error(0x0000, 'EntryAbility', `setSessionId error .Code:${err.code},message: ${err.message}`);
       });
+
+      // Restore template and quick reply data
+      this.restoreTemplateSyncData(want, sessionId);
+
       this.context.restoreWindowStage(new LocalStorage());
     } catch (error) {
       hilog.error(0x0000, 'EntryAbility', `have error. Code:${error.code}, message: ${error.message}`);
+    }
+  }
+
+  /**
+   * Restore template and quick reply sync data from peer device.
+   */
+  private restoreTemplateSyncData(want: Want, sessionId: string): void {
+    try {
+      const templateManager: TemplateManager = TemplateManager.getInstance();
+      const quickReplyManager: QuickReplyManager = QuickReplyManager.getInstance();
+
+      // Create sync data object for template/quick reply
+      const syncData: SyncDataObject = new SyncDataObject('', '', 0, '');
+      this.templateDistributedObject = distributedDataObject.create(this.context, syncData);
+      this.templateDistributedObject.on('status',
+        (sid: string, networkId: string, status: 'online' | 'offline' | 'restored') => {
+          hilog.info(0x0000, 'EntryAbility', `Template sync status: ${sid} ${status} ${networkId}`);
+          if (status === 'restored') {
+            if (!this.templateDistributedObject) {
+              return;
+            }
+            const templateData: string = this.templateDistributedObject['templateData'] as string;
+            const quickReplyData: string = this.templateDistributedObject['quickReplyData'] as string;
+
+            if (templateData && templateData.length > 0) {
+              templateManager.handleSyncData(templateData);
+            }
+            if (quickReplyData && quickReplyData.length > 0) {
+              quickReplyManager.handleSyncData(quickReplyData);
+            }
+            hilog.info(0x0000, 'EntryAbility', 'Template and quick reply data restored from peer');
+          }
+        });
+
+      // Use the same session ID to join the distributed network
+      this.templateDistributedObject.setSessionId(sessionId).catch((err: BusinessError) => {
+        hilog.error(0x0000, 'EntryAbility', `Template setSessionId error. Code:${err.code}, message:${err.message}`);
+      });
+    } catch (err) {
+      hilog.error(0x0000, 'EntryAbility', `restoreTemplateSyncData error. Code:${(err as BusinessError).code}, message:${(err as BusinessError).message}`);
     }
   }
 
@@ -102,6 +184,7 @@ export default class EntryAbility extends UIAbility {
       let sessionId: string = distributedDataObject.genSessionId();
       wantParam.distributedSessionId = sessionId;
 
+      // Sync mail data (original logic)
       let mailInfoManager: MailInfoManager = new MailInfoManager(AppStorage.get('recipient'), AppStorage.get('sender'),
         AppStorage.get('subject'), AppStorage.get('emailContent'));
       this.distributedObject = distributedDataObject.create(this.context, mailInfoManager);
@@ -113,10 +196,50 @@ export default class EntryAbility extends UIAbility {
       }).catch((err: BusinessError) => {
         hilog.error(0x0000, 'EntryAbility', `Failed to save. Code:${err.code}, message:${err.message}`);
       });
+
+      // Sync template and quick reply data
+      this.syncTemplateAndQuickReplyData(sessionId, wantParam);
+
     } catch (err) {
       hilog.error(0x0000, 'EntryAbility', `distributedDataObject failed, Code:${err.code}, message:${err.message}`);
     }
     return AbilityConstant.OnContinueResult.AGREE;
+  }
+
+  /**
+   * Sync template and quick reply data to target device during onContinue.
+   */
+  private async syncTemplateAndQuickReplyData(sessionId: string,
+    wantParam: Record<string, Object | undefined>): Promise<void> {
+    try {
+      const templateManager: TemplateManager = TemplateManager.getInstance();
+      const quickReplyManager: QuickReplyManager = QuickReplyManager.getInstance();
+
+      const templates: MailTemplate[] = templateManager.loadTemplates();
+      const quickReplies: QuickReply[] = quickReplyManager.loadQuickReplies();
+
+      const syncData: SyncDataObject = new SyncDataObject(
+        MailTemplate.toListJson(templates),
+        QuickReply.toListJson(quickReplies),
+        Date.now(),
+        'active'
+      );
+
+      this.templateDistributedObject = distributedDataObject.create(this.context, syncData);
+      this.templateDistributedObject.setSessionId(sessionId).catch((err: BusinessError) => {
+        hilog.error(0x0000, 'EntryAbility', `Template setSessionId error. Code:${err.code}, message:${err.message}`);
+      });
+
+      if (wantParam.targetDevice) {
+        await this.templateDistributedObject.save(wantParam.targetDevice as string).then(() => {
+          hilog.info(0x0000, 'EntryAbility', 'Template and quick reply data save success');
+        }).catch((err: BusinessError) => {
+          hilog.error(0x0000, 'EntryAbility', `Template save failed. Code:${err.code}, message:${err.message}`);
+        });
+      }
+    } catch (err) {
+      hilog.error(0x0000, 'EntryAbility', `syncTemplateAndQuickReplyData error. Code:${(err as BusinessError).code}, message:${(err as BusinessError).message}`);
+    }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage) {
