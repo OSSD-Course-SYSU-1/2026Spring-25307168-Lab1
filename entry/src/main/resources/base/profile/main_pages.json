@@ -1,8 +1,0 @@
-{
-  "src": [
-    "pages/MailHomePage",
-    "pages/TemplateManagePage",
-    "pages/TemplateEditPage",
-    "pages/QuickReplyManagePage"
-  ]
-}
