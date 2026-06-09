@@ -1,0 +1,55 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\29533\\.ohos\\config\\default_target_BYPSP_PDcOBQOymArOWAFCLsPbKInZqFf7QM2ofA0Hg=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B1483DBE2CEA4F2DE4C226313885BE8BD596C86E49537329485D2CB3ED8804E6DA924DFA6FB7CF8",
+          "profile": "C:\\Users\\29533\\.ohos\\config\\default_target_BYPSP_PDcOBQOymArOWAFCLsPbKInZqFf7QM2ofA0Hg=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\29533\\.ohos\\config\\default_target_BYPSP_PDcOBQOymArOWAFCLsPbKInZqFf7QM2ofA0Hg=.p12",
+          "storePassword": "0000001BEC0898DB1CAAF943AAFE767D42E669C17F19392931DB301647155118C6FE804912C325ABC22BED"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true
+          }
+        },
+        "targetSdkVersion": "6.0.2(22)"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "打靶训练"
+    },
+    {
+      "name": "app_desc",
+      "value": "提升瞄准能力的打靶训练游戏"
+    },
+    {
+      "name": "module_desc",
+      "value": "打靶训练游戏模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "打靶训练游戏主界面"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "打靶训练"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "targetgame",
+  "version": "1.0.0",
+  "description": "打靶训练游戏",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {},
+  "devDependencies": {}
+}

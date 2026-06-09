@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "ohos-module-entry": {
+    "SELECT_TARGET": "default",
+    "MODULE_BUILD_DIR": "E:\\lezihuawei\\target\\entry\\build",
+    "TARGETS": {
+      "default": {
+        "SOURCE_ROOT": "E:\\lezihuawei\\target\\entry\\src\\main",
+        "RESOURCES_PATH": [
+          "E:\\lezihuawei\\target\\entry\\src\\main\\resources"
+        ],
+        "BUILD_PATH": {
+          "OUTPUT_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\outputs\\default",
+          "INTERMEDIA_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates",
+          "JS_ASSETS_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\loader_out\\default",
+          "JS_LITE_ASSETS_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\loader_out_lite\\default",
+          "RES_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\res\\default",
+          "RES_PROFILE_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\res\\default\\resources\\base\\profile",
+          "ETS_SUPER_VISUAL_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\cache\\default\\default@CompileArkTS\\esmodule",
+          "JS_SUPER_VISUAL_PATH": "E:\\lezihuawei\\target\\entry\\build\\default\\cache\\default\\default@CompileJS\\jsbundle",
+          "WORKER_LOADER": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\loader\\default\\loader.json",
+          "MANIFEST_JSON": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\manifest\\default",
+          "OUTPUT_METADATA_JSON": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\hap_metadata\\default\\output_metadata.json",
+          "SOURCE_MAP_DIR": "E:\\lezihuawei\\target\\entry\\build\\default\\intermediates\\source_map\\default"
+        },
+        "BUILD_OPTION": {
+          "debuggable": true
+        }
+      }
+    },
+    "BUILD_OPTION": {
+      "default-default": {
+        "debuggable": true,
+        "copyFrom": "default",
+        "strictMode": {
+          "caseSensitiveCheck": true
+        },
+        "externalNativeOptions": {
+          "path": "./src/main/cpp",
+          "arguments": "",
+          "cppFlags": ""
+        },
+        "name": "debug"
+      }
+    },
+    "BUILD_PROFILE_OPT": {
+      "apiType": "stageMode",
+      "buildOption": {
+        "externalNativeOptions": {
+          "path": "./src/main/cpp",
+          "arguments": "",
+          "cppFlags": ""
+        }
+      },
+      "buildOptionSet": [
+        {
+          "name": "release",
+          "arkOptions": {
+            "obfuscation": {
+              "ruleOptions": {
+                "enable": false
+              }
+            }
+          }
+        },
+        {
+          "name": "default"
+        },
+        {
+          "name": "debug"
+        }
+      ],
+      "targets": [
+        {
+          "name": "default",
+          "runtimeOS": "HarmonyOS"
+        }
+      ]
+    },
+    "BUILD_CACHE_DIR": ""
+  },
+  "ohos-project": {
+    "SELECT_PRODUCT_NAME": "default",
+    "MODULE_BUILD_DIR": "E:\\lezihuawei\\target\\build",
+    "BUNDLE_NAME": "com.example.targetgame",
+    "VERSION_CODE": 1000000,
+    "VERSION_NAME": "1.0.0",
+    "BUILD_PATH": {
+      "OUTPUT_PATH": "E:\\lezihuawei\\target\\build\\outputs\\default"
+    },
+    "MODULES": [
+      {
+        "name": "entry",
+        "srcPath": "E:\\lezihuawei\\target\\entry",
+        "targets": [
+          {
+            "name": "default",
+            "applyToProducts": [
+              "default"
+            ]
+          }
+        ],
+        "belongProjectPath": "E:\\lezihuawei\\target"
+      }
+    ],
+    "PROFILE_OPT": {
+      "app": {
+        "signingConfigs": [
+          {
+            "name": "default",
+            "type": "HarmonyOS",
+            "material": {
+              "certpath": "C:\\Users\\29533\\.ohos\\config\\default_target_BYPSP_PDcOBQOymArOWAFCLsPbKInZqFf7QM2ofA0Hg=.cer",
+              "keyAlias": "debugKey",
+              "keyPassword": "0000001B1483DBE2CEA4F2DE4C226313885BE8BD596C86E49537329485D2CB3ED8804E6DA924DFA6FB7CF8",
+              "profile": "C:\\Users\\29533\\.ohos\\config\\default_target_BYPSP_PDcOBQOymArOWAFCLsPbKInZqFf7QM2ofA0Hg=.p7b",
+              "signAlg": "SHA256withECDSA",
+              "storeFile": "C:\\Users\\29533\\.ohos\\config\\default_target_BYPSP_PDcOBQOymArOWAFCLsPbKInZqFf7QM2ofA0Hg=.p12",
+              "storePassword": "0000001BEC0898DB1CAAF943AAFE767D42E669C17F19392931DB301647155118C6FE804912C325ABC22BED"
+            }
+          }
+        ],
+        "products": [
+          {
+            "name": "default",
+            "signingConfig": "default",
+            "compatibleSdkVersion": "5.0.0(12)",
+            "runtimeOS": "HarmonyOS",
+            "buildOption": {
+              "strictMode": {
+                "caseSensitiveCheck": true
+              }
+            },
+            "targetSdkVersion": "6.0.2(22)"
+          }
+        ],
+        "buildModeSet": [
+          {
+            "name": "debug"
+          },
+          {
+            "name": "release"
+          }
+        ]
+      },
+      "modules": [
+        {
+          "name": "entry",
+          "srcPath": "./entry",
+          "targets": [
+            {
+              "name": "default",
+              "applyToProducts": [
+                "default"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "CONFIG_PROPERTIES": {
+      "enableSignTask": true,
+      "skipNativeIncremental": false,
+      "hvigor.keepDependency": true
+    },
+    "OVERALL_PROJECT_PATHS": [
+      "E:\\lezihuawei\\target"
+    ],
+    "BUILD_CACHE_DIR": ""
+  }
+}
