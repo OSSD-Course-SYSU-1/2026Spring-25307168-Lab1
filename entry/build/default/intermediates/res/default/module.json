@@ -29,6 +29,15 @@
 		"deliveryWithInstall":	true,
 		"installationFree":	false,
 		"pages":	"$profile:main_pages",
+		"requestPermissions":	[{
+				"name":	"ohos.permission.DISTRIBUTED_DATASYNC",
+				"reason":	"$string:distributed_permission_reason",
+				"usedScene":	{
+					"abilities":	["EntryAbility"],
+					"when":	"inuse"
+				},
+				"reasonId":	16777229
+			}],
 		"abilities":	[{
 				"name":	"EntryAbility",
 				"srcEntry":	"./ets/entryability/EntryAbility.ets",
@@ -43,15 +52,15 @@
 						"actions":	["action.system.home"]
 					}],
 				"descriptionId":	16777218,
-				"iconId":	16777223,
+				"iconId":	16777232,
 				"labelId":	16777219,
-				"startWindowIconId":	16777224,
-				"startWindowBackgroundId":	16777222
+				"startWindowIconId":	16777233,
+				"startWindowBackgroundId":	16777231
 			}],
 		"packageName":	"entry",
 		"virtualMachine":	"ark12.0.2.0",
 		"compileMode":	"esmodule",
 		"dependencies":	[],
-		"descriptionId":	16777221
+		"descriptionId":	16777230
 	}
 }

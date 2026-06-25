@@ -19,6 +19,42 @@
     {
       "name": "EntryAbility_label",
       "value": "打靶训练"
+    },
+    {
+      "name": "distributed_permission_reason",
+      "value": "用于跨设备投送游戏画面，需要发现和连接附近设备"
+    },
+    {
+      "name": "cast_button_text",
+      "value": "跨设备投送"
+    },
+    {
+      "name": "cast_discovering",
+      "value": "正在搜索附近设备..."
+    },
+    {
+      "name": "cast_no_device",
+      "value": "未发现可用设备"
+    },
+    {
+      "name": "cast_connected",
+      "value": "已连接至"
+    },
+    {
+      "name": "cast_disconnect",
+      "value": "断开"
+    },
+    {
+      "name": "cast_connect",
+      "value": "连接"
+    },
+    {
+      "name": "cast_connecting",
+      "value": "连接中"
+    },
+    {
+      "name": "cast_select_device",
+      "value": "选择投送设备"
     }
   ]
 }

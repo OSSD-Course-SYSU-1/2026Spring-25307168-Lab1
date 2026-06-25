@@ -1,4 +1,10 @@
 import router from '@ohos.router';
+import { ScreenAdapter } from '../utils/ScreenAdapter';
+import { GamePage as GP, CastUI, getSizeValue, getStringValue } from '../constants/LayoutConstants';
+import { DeviceCastManager, DeviceInfo, CastConnectionState } from '../cast/DeviceCastManager';
+import { DistributedGameData, SyncableGameState, ControlEvent } from '../cast/DistributedGameData';
+import { DeviceSelectPanel } from '../cast/DeviceSelectPanel';
+import { CastStatusBar } from '../cast/CastStatusBar';
 
 interface Target {
   id: number;
@@ -11,6 +17,10 @@ interface Target {
 interface GameRecord {
   score: number;
   date: string;
+  hits: number;
+  misses: number;
+  maxCombo: number;
+  avgReactionMs: number;
 }
 
 interface SizeOption {
@@ -18,10 +28,17 @@ interface SizeOption {
   label: string;
 }
 
-// 全局变量存储游戏记录
-let gameRecords: GameRecord[] = [];
+interface FloatingDot {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  speed: number;
+}
 
-// 靶子大小选项
+let gameRecords: GameRecord[] = [];
+let countOptions: number[] = [1, 2, 3, 4, 5];
 let sizeOptions: SizeOption[] = [
   { value: 1, label: '小' },
   { value: 2, label: '中' },
@@ -37,13 +54,25 @@ struct GamePage {
   @State isGameRunning: boolean = false;
   @State isGameOver: boolean = false;
   @State isSmallScreen: boolean = false;
-  // 靶子数量：屏幕上同时保持的靶子数量
   @State targetCount: number = 1;
-  // 靶子大小：1=小, 2=中, 3=大
   @State targetSize: number = 2;
-  // 游戏时长（秒）：15, 30, 60
   @State gameDuration: number = 30;
   @State isGamePreparing: boolean = true;
+
+  @State connectionState: CastConnectionState = CastConnectionState.DISCONNECTED;
+  @State targetDeviceName: string = '';
+  @State discoveredDevices: DeviceInfo[] = [];
+  @State isDiscovering: boolean = false;
+  @State isDistributedSupported: boolean = false;
+
+  @State hitCount: number = 0;
+  @State missCount: number = 0;
+  @State combo: number = 0;
+  @State maxCombo: number = 0;
+  @State lastHitTime: number = 0;
+  @State totalReactionMs: number = 0;
+  @State dots: FloatingDot[] = [];
+  @State animOffset: number = 0;
 
   private gameTimer: number = -1;
   private targetTimer: number = -1;
@@ -52,43 +81,176 @@ struct GamePage {
   private gameAreaHeight: number = 0;
   private readonly MAX_ATTEMPTS: number = 100;
   private readonly PADDING: number = 10;
+  private gameStartTime: number = 0;
+
+  private castManager: DeviceCastManager = DeviceCastManager.getInstance();
+  private distributedData: DistributedGameData = new DistributedGameData();
+  private dotId: number = 0;
+  private bgAnimTimer: number = -1;
+
+  private deviceSelectDialogController: CustomDialogController = new CustomDialogController({
+    builder: DeviceSelectPanel({
+      devices: this.discoveredDevices,
+      connectionState: this.connectionState,
+      isDiscovering: this.isDiscovering,
+      isSmallScreen: this.isSmallScreen,
+      onDeviceSelect: (deviceId: string) => {
+        this.onDeviceSelected(deviceId);
+      },
+      onClose: () => {
+        this.castManager.stopDeviceDiscovery();
+        this.isDiscovering = false;
+      },
+      onRetry: () => {
+        this.startDeviceDiscovery();
+      }
+    }),
+    autoCancel: true
+  });
 
   aboutToAppear() {
-    this.isSmallScreen = false;
+    this.isSmallScreen = ScreenAdapter.initScreenDetection();
+    ScreenAdapter.registerListener((isSmall: boolean) => {
+      this.isSmallScreen = isSmall;
+    });
     this.isGamePreparing = true;
+    this.initCast();
+    this.initDots();
+    this.startBgAnimation();
   }
 
   aboutToDisappear() {
+    ScreenAdapter.unregisterListener();
     this.stopGame();
-  }
-
-  // 获取当前靶子半径（根据大小选择）
-  getTargetRadius(): number {
-    if (this.isSmallScreen) {
-      if (this.targetSize === 1) return 20; // 小
-      if (this.targetSize === 2) return 30; // 中
-      return 40; // 大
-    } else {
-      if (this.targetSize === 1) return 35; // 小
-      if (this.targetSize === 2) return 55; // 中
-      return 75; // 大
+    this.distributedData.destroy();
+    if (this.bgAnimTimer !== -1) {
+      clearInterval(this.bgAnimTimer);
     }
   }
 
-  // 位置验证方法：检查给定位置是否有效（不超出边界且不与已存在靶子重叠）
-  isPositionValid(x: number, y: number, radius: number): boolean {
-    const areaWidth = this.gameAreaWidth || (this.isSmallScreen ? 300 : 500);
-    const areaHeight = this.gameAreaHeight || (this.isSmallScreen ? 400 : 600);
+  private initDots() {
+    for (let i = 0; i < 12; i++) {
+      this.dots.push({
+        id: this.dotId++,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: 2 + Math.random() * 4,
+        opacity: 0.05 + Math.random() * 0.2,
+        speed: 0.05 + Math.random() * 0.12
+      });
+    }
+  }
 
-    // 边界验证
+  private startBgAnimation() {
+    this.bgAnimTimer = setInterval(() => {
+      this.animOffset += 1;
+      const updated: FloatingDot[] = [];
+      for (const d of this.dots) {
+        let newY = d.y - d.speed;
+        if (newY < -5) newY = 105;
+        updated.push({
+          id: d.id,
+          x: d.x + Math.sin(this.animOffset * 0.02 + d.id) * 0.03,
+          y: newY,
+          size: d.size,
+          opacity: d.opacity,
+          speed: d.speed
+        });
+      }
+      this.dots = updated;
+    }, 50);
+  }
+
+  private initCast(): void {
+    this.castManager.init();
+    this.isDistributedSupported = this.castManager.isDistributedSupported();
+    this.castManager.setOnConnectionStateChange((state: CastConnectionState) => {
+      this.connectionState = state;
+      if (state === CastConnectionState.CONNECTED) {
+        this.targetDeviceName = this.castManager.getConnectedDeviceName();
+        const sessionId = 'targetgame_' + Date.now();
+        this.distributedData.createDistributedObject(sessionId);
+        this.distributedData.onRemoteControl((event: ControlEvent) => {
+          this.handleRemoteControl(event);
+        });
+      } else if (state === CastConnectionState.DISCONNECTED) {
+        this.targetDeviceName = '';
+        this.distributedData.destroy();
+      }
+    });
+    this.castManager.setOnDeviceListChange((devices: DeviceInfo[]) => {
+      this.discoveredDevices = devices;
+    });
+  }
+
+  private startDeviceDiscovery(): void {
+    this.isDiscovering = true;
+    this.discoveredDevices = [];
+    this.castManager.startDeviceDiscovery();
+    setTimeout(() => {
+      this.isDiscovering = false;
+    }, 5000);
+  }
+
+  private async onDeviceSelected(deviceId: string): Promise<void> {
+    const success = await this.castManager.connectDevice(deviceId);
+    if (success) {
+      this.deviceSelectDialogController.close();
+      this.castManager.stopDeviceDiscovery();
+      this.isDiscovering = false;
+    }
+  }
+
+  private disconnectCast(): void {
+    this.castManager.disconnectDevice();
+  }
+
+  private syncGameStateToRemote(): void {
+    if (this.connectionState !== CastConnectionState.CONNECTED) {
+      return;
+    }
+    const state: SyncableGameState = {
+      score: this.score,
+      timeLeft: this.timeLeft,
+      targetsJson: JSON.stringify(this.targets),
+      isGameRunning: this.isGameRunning,
+      isGameOver: this.isGameOver,
+      isGamePreparing: this.isGamePreparing,
+      targetCount: this.targetCount,
+      targetSize: this.targetSize,
+      gameDuration: this.gameDuration
+    };
+    this.distributedData.syncGameState(state);
+  }
+
+  private handleRemoteControl(event: ControlEvent): void {
+    if (event.type === 'hit') {
+      const target = this.targets.find(t => t.id === event.targetId);
+      if (target) {
+        this.hitTarget(target);
+      }
+    }
+  }
+
+  getTargetRadius(): number {
+    if (this.targetSize === 1) {
+      return getSizeValue(GP.targetRadiusSmall, this.isSmallScreen);
+    }
+    if (this.targetSize === 2) {
+      return getSizeValue(GP.targetRadiusMedium, this.isSmallScreen);
+    }
+    return getSizeValue(GP.targetRadiusLarge, this.isSmallScreen);
+  }
+
+  isPositionValid(x: number, y: number, radius: number): boolean {
+    const areaWidth = this.gameAreaWidth || getSizeValue(GP.defaultAreaWidth, this.isSmallScreen);
+    const areaHeight = this.gameAreaHeight || getSizeValue(GP.defaultAreaHeight, this.isSmallScreen);
     if (x < radius || x > areaWidth - radius) {
       return false;
     }
     if (y < radius || y > areaHeight - radius) {
       return false;
     }
-
-    // 距离验证：检查与所有已存在靶子的距离
     for (const existingTarget of this.targets) {
       const distanceSquared = (x - existingTarget.x) ** 2 + (y - existingTarget.y) ** 2;
       const minDistanceSquared = (radius + existingTarget.radius + this.PADDING) ** 2;
@@ -96,13 +258,22 @@ struct GamePage {
         return false;
       }
     }
-
     return true;
+  }
+
+  getAccuracy(): number {
+    const total = this.hitCount + this.missCount;
+    if (total === 0) return 0;
+    return Math.round((this.hitCount / total) * 100);
+  }
+
+  getAvgReactionMs(): number {
+    if (this.hitCount === 0) return 0;
+    return Math.round(this.totalReactionMs / this.hitCount);
   }
 
   startGame() {
     this.stopGame();
-
     this.score = 0;
     this.timeLeft = this.gameDuration;
     this.targets = [];
@@ -110,8 +281,14 @@ struct GamePage {
     this.isGameOver = false;
     this.isGamePreparing = false;
     this.targetId = 0;
+    this.hitCount = 0;
+    this.missCount = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.lastHitTime = 0;
+    this.totalReactionMs = 0;
+    this.gameStartTime = Date.now();
 
-    // 延迟生成靶子，确保游戏区域尺寸已通过onAreaChange获取
     setTimeout(() => {
       this.fillTargets();
     }, 100);
@@ -121,10 +298,10 @@ struct GamePage {
       if (this.timeLeft <= 0) {
         this.endGame();
       }
+      this.syncGameStateToRemote();
     }, 1000);
   }
 
-  // 补充靶子到 targetCount 个
   fillTargets() {
     const needCount = this.targetCount - this.targets.length;
     for (let i = 0; i < needCount; i++) {
@@ -132,23 +309,18 @@ struct GamePage {
     }
   }
 
-  // 创建单个靶子（固定大小，不自动消失）
   createOneTarget() {
     const radius = this.getTargetRadius();
-    const areaWidth = this.gameAreaWidth || (this.isSmallScreen ? 300 : 500);
-    const areaHeight = this.gameAreaHeight || (this.isSmallScreen ? 400 : 600);
-
-    // 计算有效区域边界
+    const areaWidth = this.gameAreaWidth || getSizeValue(GP.defaultAreaWidth, this.isSmallScreen);
+    const areaHeight = this.gameAreaHeight || getSizeValue(GP.defaultAreaHeight, this.isSmallScreen);
     const minX = radius;
     const maxX = areaWidth - radius;
     const minY = radius;
     const maxY = areaHeight - radius;
 
-    // 尝试-验证-重试机制：最多尝试 MAX_ATTEMPTS 次
     for (let i = 0; i < this.MAX_ATTEMPTS; i++) {
       const x = minX + Math.random() * (maxX - minX);
       const y = minY + Math.random() * (maxY - minY);
-
       if (this.isPositionValid(x, y, radius)) {
         const newTarget: Target = {
           id: this.targetId++,
@@ -161,22 +333,39 @@ struct GamePage {
         return;
       }
     }
-
-    // 超过最大尝试次数，放弃生成
   }
 
   hitTarget(target: Target) {
     if (!this.isGameRunning) return;
 
-    const baseScore = this.isSmallScreen ? 30 : 50;
+    const now = Date.now();
+    if (this.lastHitTime > 0) {
+      this.totalReactionMs += (now - this.lastHitTime);
+    }
+    this.lastHitTime = now;
+
+    const baseScore = getSizeValue(GP.baseScore, this.isSmallScreen);
     const scoreMultiplier = baseScore / target.radius;
     const points = Math.floor(10 * scoreMultiplier);
 
-    this.score += points;
-    // 移除被击中的靶子
+    this.combo++;
+    if (this.combo > this.maxCombo) {
+      this.maxCombo = this.combo;
+    }
+
+    const comboBonus = this.combo > 1 ? Math.floor(points * (this.combo - 1) * 0.1) : 0;
+    this.score += points + comboBonus;
+    this.hitCount++;
+
     this.targets = this.targets.filter((t: Target) => t.id !== target.id);
-    // 立即补充靶子，保持屏幕上始终有 targetCount 个
     this.fillTargets();
+    this.syncGameStateToRemote();
+  }
+
+  onMissClick() {
+    if (!this.isGameRunning) return;
+    this.missCount++;
+    this.combo = 0;
   }
 
   endGame() {
@@ -185,6 +374,7 @@ struct GamePage {
     this.targets = [];
     this.stopGame();
     this.saveScore();
+    this.syncGameStateToRemote();
   }
 
   stopGame() {
@@ -201,12 +391,13 @@ struct GamePage {
   saveScore() {
     const newRecord: GameRecord = {
       score: this.score,
-      date: new Date().toLocaleString()
+      date: new Date().toLocaleString(),
+      hits: this.hitCount,
+      misses: this.missCount,
+      maxCombo: this.maxCombo,
+      avgReactionMs: this.getAvgReactionMs()
     };
-
     gameRecords.push(newRecord);
-
-    // 按分数排序，保留前10条记录
     gameRecords.sort((a: GameRecord, b: GameRecord) => b.score - a.score);
     if (gameRecords.length > 10) {
       gameRecords = gameRecords.slice(0, 10);
@@ -216,30 +407,40 @@ struct GamePage {
   build() {
     Stack() {
       Column() {
-        // 准备阶段：显示靶子数量选择 + 靶子大小选择 + 开始按钮
+        CastStatusBar({
+          connectionState: this.connectionState,
+          targetDeviceName: this.targetDeviceName,
+          isSmallScreen: this.isSmallScreen,
+          onDisconnect: () => {
+            this.disconnectCast();
+          }
+        })
+        .margin({ top: 5 })
+
         if (this.isGamePreparing) {
           Column() {
             Text('打靶训练')
-              .fontSize(this.isSmallScreen ? 28 : 40)
+              .fontSize(getSizeValue(GP.titleFontSize, this.isSmallScreen))
               .fontColor('#FFFFFF')
               .fontWeight(FontWeight.Bold)
+              .textShadow({ radius: 8, color: 'rgba(0,0,0,0.3)', offsetX: 0, offsetY: 2 })
 
-            // 靶子数量选择区域
             Row() {
               Text('靶子数量:')
-                .fontSize(this.isSmallScreen ? 16 : 20)
+                .fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen))
                 .fontColor('#FFFFFF')
                 .fontWeight(FontWeight.Bold)
 
-              ForEach([1, 2, 3, 4, 5], (count: number) => {
-                Button(count.toString())
-                  .width(this.isSmallScreen ? 36 : 48)
-                  .height(this.isSmallScreen ? 36 : 48)
-                  .fontSize(this.isSmallScreen ? 16 : 20)
+              ForEach(countOptions, (count: number) => {
+                Button(count.toString(), { type: ButtonType.Normal })
+                  .width(getSizeValue(GP.countButtonSize, this.isSmallScreen))
+                  .height(getSizeValue(GP.countButtonSize, this.isSmallScreen))
+                  .fontSize(getSizeValue(GP.countButtonFontSize, this.isSmallScreen))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
-                  .backgroundColor(this.targetCount === count ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)')
-                  .borderRadius(this.isSmallScreen ? 18 : 24)
+                  .backgroundColor(this.targetCount === count ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)')
+                  .borderRadius(getSizeValue(GP.countButtonBorderRadius, this.isSmallScreen))
+                  .padding(0)
                   .margin({ left: 8 })
                   .onClick(() => {
                     this.targetCount = count;
@@ -248,47 +449,44 @@ struct GamePage {
             }
             .margin({ top: 30 })
 
-            // 靶子大小选择区域
             Row() {
               Text('靶子大小:')
-                .fontSize(this.isSmallScreen ? 16 : 20)
+                .fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen))
                 .fontColor('#FFFFFF')
                 .fontWeight(FontWeight.Bold)
 
               ForEach(sizeOptions, (item: SizeOption) => {
                 Button(item.label)
-                  .width(this.isSmallScreen ? 50 : 64)
-                  .height(this.isSmallScreen ? 36 : 48)
-                  .fontSize(this.isSmallScreen ? 16 : 20)
+                  .width(getSizeValue(GP.sizeButtonWidth, this.isSmallScreen))
+                  .height(getSizeValue(GP.sizeButtonHeight, this.isSmallScreen))
+                  .fontSize(getSizeValue(GP.sizeButtonFontSize, this.isSmallScreen))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
-                  .backgroundColor(this.targetSize === item.value ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)')
-                  .borderRadius(this.isSmallScreen ? 18 : 24)
+                  .backgroundColor(this.targetSize === item.value ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)')
+                  .borderRadius(getSizeValue(GP.sizeButtonBorderRadius, this.isSmallScreen))
                   .margin({ left: 8 })
                   .onClick(() => {
                     this.targetSize = item.value;
                   })
               }, (item: SizeOption) => item.value.toString())
-
             }
             .margin({ top: 20 })
 
-            // 游戏时长选择区域
             Row() {
               Text('游戏时长:')
-                .fontSize(this.isSmallScreen ? 16 : 20)
+                .fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen))
                 .fontColor('#FFFFFF')
                 .fontWeight(FontWeight.Bold)
 
               ForEach([15, 30, 60], (duration: number) => {
                 Button(duration + 's')
-                  .width(this.isSmallScreen ? 60 : 80)
-                  .height(this.isSmallScreen ? 36 : 48)
-                  .fontSize(this.isSmallScreen ? 14 : 18)
+                  .width(getSizeValue(GP.durationButtonWidth, this.isSmallScreen))
+                  .height(getSizeValue(GP.durationButtonHeight, this.isSmallScreen))
+                  .fontSize(getSizeValue(GP.durationButtonFontSize, this.isSmallScreen))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
-                  .backgroundColor(this.gameDuration === duration ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)')
-                  .borderRadius(this.isSmallScreen ? 18 : 24)
+                  .backgroundColor(this.gameDuration === duration ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)')
+                  .borderRadius(getSizeValue(GP.durationButtonBorderRadius, this.isSmallScreen))
                   .margin({ left: 8 })
                   .onClick(() => {
                     this.gameDuration = duration;
@@ -298,15 +496,30 @@ struct GamePage {
             .margin({ top: 20 })
 
             Button('开始游戏')
-              .width(this.isSmallScreen ? 200 : 280)
-              .height(this.isSmallScreen ? 50 : 70)
-              .fontSize(this.isSmallScreen ? 20 : 28)
+              .width(getSizeValue(GP.startButtonWidth, this.isSmallScreen))
+              .height(getSizeValue(GP.startButtonHeight, this.isSmallScreen))
+              .fontSize(getSizeValue(GP.startButtonFontSize, this.isSmallScreen))
               .backgroundColor('#4ECDC4')
               .borderRadius(35)
+              .shadow({ radius: 12, color: 'rgba(78,205,196,0.4)', offsetX: 0, offsetY: 4 })
               .margin({ top: 40 })
               .onClick(() => {
                 this.startGame();
               })
+
+            if (this.isDistributedSupported) {
+              Button('跨设备投送')
+                .width(getSizeValue(CastUI.castButtonWidth, this.isSmallScreen))
+                .height(getSizeValue(CastUI.castButtonHeight, this.isSmallScreen))
+                .fontSize(getSizeValue(CastUI.castButtonFontSize, this.isSmallScreen))
+                .backgroundColor('#667eea')
+                .borderRadius(35)
+                .margin({ top: 20 })
+                .onClick(() => {
+                  this.startDeviceDiscovery();
+                  this.deviceSelectDialogController.open();
+                })
+            }
           }
           .width('100%')
           .height('100%')
@@ -314,90 +527,248 @@ struct GamePage {
           .alignItems(HorizontalAlign.Center)
         }
 
-        // 游戏进行中：显示得分/时间 + 游戏区域
         if (!this.isGamePreparing && !this.isGameOver) {
-          Row() {
-            Text(`得分: ${this.score}`)
-              .fontSize(this.isSmallScreen ? 20 : 28)
-              .fontColor('#FFFFFF')
-              .fontWeight(FontWeight.Bold)
+          Column() {
+            Row() {
+              Column() {
+                Text(`${this.score}`)
+                  .fontSize(this.isSmallScreen ? 28 : 36)
+                  .fontColor('#FFD700')
+                  .fontWeight(FontWeight.Bold)
+                Text('得分')
+                  .fontSize(this.isSmallScreen ? 11 : 13)
+                  .fontColor('rgba(255,255,255,0.6)')
+              }
+              .alignItems(HorizontalAlign.Center)
 
-            Blank()
+              Blank()
 
-            Text(`时间: ${this.timeLeft}s`)
-              .fontSize(this.isSmallScreen ? 20 : 28)
-              .fontColor('#FFFFFF')
-              .fontWeight(FontWeight.Bold)
-          }
-          .width('90%')
-          .padding(this.isSmallScreen ? 10 : 20)
-          .backgroundColor('rgba(0, 0, 0, 0.3)')
-          .borderRadius(15)
-          .margin({ top: this.isSmallScreen ? 10 : 20 })
+              Column() {
+                Text(`${this.timeLeft}s`)
+                  .fontSize(this.isSmallScreen ? 28 : 36)
+                  .fontColor(this.timeLeft <= 5 ? '#FF6B6B' : '#FFFFFF')
+                  .fontWeight(FontWeight.Bold)
+                Text('剩余时间')
+                  .fontSize(this.isSmallScreen ? 11 : 13)
+                  .fontColor('rgba(255,255,255,0.6)')
+              }
+              .alignItems(HorizontalAlign.Center)
 
-          Stack() {
-            Column()
-              .width('100%')
-              .height('100%')
-              .backgroundColor('rgba(255, 255, 255, 0.1)')
-              .borderRadius(20)
+              Blank()
 
-            ForEach(this.targets, (target: Target) => {
-              // 纯白统一圆形靶子
-              Circle()
+              Column() {
+                Text(`${this.getAccuracy()}%`)
+                  .fontSize(this.isSmallScreen ? 22 : 28)
+                  .fontColor('#4ECDC4')
+                  .fontWeight(FontWeight.Bold)
+                Text('命中率')
+                  .fontSize(this.isSmallScreen ? 11 : 13)
+                  .fontColor('rgba(255,255,255,0.6)')
+              }
+              .alignItems(HorizontalAlign.Center)
+
+              if (this.combo > 1) {
+                Blank()
+                Column() {
+                  Text(`x${this.combo}`)
+                    .fontSize(this.isSmallScreen ? 22 : 28)
+                    .fontColor('#FF6B6B')
+                    .fontWeight(FontWeight.Bold)
+                  Text('连击')
+                    .fontSize(this.isSmallScreen ? 11 : 13)
+                    .fontColor('rgba(255,255,255,0.6)')
+                }
+                .alignItems(HorizontalAlign.Center)
+              }
+            }
+            .width('92%')
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor('rgba(0, 0, 0, 0.4)')
+            .borderRadius(16)
+            .margin({ top: getSizeValue(GP.scoreMarginTop, this.isSmallScreen) })
+            .alignItems(VerticalAlign.Center)
+
+            Progress({ value: this.timeLeft, total: this.gameDuration, type: ProgressType.Linear })
+              .width('92%')
+              .color(this.timeLeft <= 5 ? '#FF6B6B' : '#4ECDC4')
+              .backgroundColor('rgba(255,255,255,0.1)')
+              .borderRadius(4)
+              .margin({ top: 8 })
+              .style({ strokeWidth: this.isSmallScreen ? 6 : 8 })
+
+            Stack() {
+              Column()
+                .width('100%')
+                .height('100%')
+                .backgroundColor('rgba(255, 255, 255, 0.06)')
+                .borderRadius(20)
+                .border({ width: 1, color: 'rgba(255,255,255,0.08)' })
+
+              ForEach(this.targets, (target: Target) => {
+                Stack() {
+                  Circle()
+                    .width(target.radius * 2)
+                    .height(target.radius * 2)
+                    .fill('rgba(255, 107, 107, 0.15)')
+                  Circle()
+                    .width(target.radius * 1.4)
+                    .height(target.radius * 1.4)
+                    .fill('rgba(255, 107, 107, 0.25)')
+                  Circle()
+                    .width(target.radius * 0.8)
+                    .height(target.radius * 0.8)
+                    .fill('#FF6B6B')
+                  Circle()
+                    .width(target.radius * 0.35)
+                    .height(target.radius * 0.35)
+                    .fill('#FFFFFF')
+                }
                 .width(target.radius * 2)
                 .height(target.radius * 2)
-                .fill('#FFFFFF')
                 .position({ x: target.x - target.radius, y: target.y - target.radius })
                 .opacity(target.opacity)
                 .onClick(() => {
                   this.hitTarget(target);
                 })
-            }, (target: Target) => target.id.toString())
+              }, (target: Target) => target.id.toString())
+            }
+            .width('92%')
+            .height(getStringValue(GP.gameAreaHeight, this.isSmallScreen))
+            .margin({ top: getSizeValue(GP.gameAreaMarginTop, this.isSmallScreen) })
+            .onAreaChange((oldValue: Area, newValue: Area) => {
+              this.gameAreaWidth = newValue.width as number;
+              this.gameAreaHeight = newValue.height as number;
+            })
+            .onClick(() => {
+              this.onMissClick();
+            })
           }
-          .width('90%')
-          .height(this.isSmallScreen ? '55%' : '65%')
-          .margin({ top: this.isSmallScreen ? 10 : 20 })
-          .onAreaChange((oldValue: Area, newValue: Area) => {
-            this.gameAreaWidth = newValue.width as number;
-            this.gameAreaHeight = newValue.height as number;
-          })
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
         }
       }
       .width('100%')
       .height('100%')
       .linearGradient({
         angle: 135,
-        colors: [['#667eea', 0.0], ['#764ba2', 1.0]]
+        colors: [['#1a1a3e', 0.0], ['#2d1b69', 0.5], ['#764ba2', 1.0]]
       })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
-      // 游戏结束面板 — 使用Stack叠加在屏幕中央
+      ForEach(this.dots, (dot: FloatingDot) => {
+        Circle()
+          .width(dot.size)
+          .height(dot.size)
+          .fill(`rgba(255, 255, 255, ${dot.opacity})`)
+          .position({ x: `${dot.x}%`, y: `${dot.y}%` })
+      }, (dot: FloatingDot) => dot.id.toString())
+
       if (this.isGameOver) {
         Column() {
           Text('游戏结束!')
-            .fontSize(this.isSmallScreen ? 28 : 36)
+            .fontSize(getSizeValue(GP.gameOverTitleFontSize, this.isSmallScreen))
             .fontColor('#FFFFFF')
             .fontWeight(FontWeight.Bold)
             .width('100%')
             .textAlign(TextAlign.Center)
 
-          Text(`最终得分: ${this.score}`)
-            .fontSize(this.isSmallScreen ? 24 : 32)
+          Text(`${this.score}`)
+            .fontSize(this.isSmallScreen ? 48 : 64)
             .fontColor('#FFD700')
             .fontWeight(FontWeight.Bold)
             .width('100%')
             .textAlign(TextAlign.Center)
-            .margin({ top: 20 })
+            .margin({ top: 8 })
+
+          Text('最终得分')
+            .fontSize(this.isSmallScreen ? 14 : 16)
+            .fontColor('rgba(255,255,255,0.5)')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+
+          Row() {
+            Column() {
+              Text(`${this.hitCount}`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#4ECDC4')
+                .fontWeight(FontWeight.Bold)
+              Text('命中')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+
+            Column() {
+              Text(`${this.missCount}`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#FF6B6B')
+                .fontWeight(FontWeight.Bold)
+              Text('失误')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+
+            Column() {
+              Text(`${this.getAccuracy()}%`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#4ECDC4')
+                .fontWeight(FontWeight.Bold)
+              Text('命中率')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+          }
+          .width('100%')
+          .margin({ top: 24 })
+          .padding({ top: 16, bottom: 16 })
+          .backgroundColor('rgba(255,255,255,0.05)')
+          .borderRadius(12)
+
+          Row() {
+            Column() {
+              Text(`x${this.maxCombo}`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#FFD700')
+                .fontWeight(FontWeight.Bold)
+              Text('最大连击')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+
+            Column() {
+              Text(`${this.getAvgReactionMs()}ms`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#667eea')
+                .fontWeight(FontWeight.Bold)
+              Text('平均反应')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+          }
+          .width('100%')
+          .margin({ top: 12 })
+          .padding({ top: 16, bottom: 16 })
+          .backgroundColor('rgba(255,255,255,0.05)')
+          .borderRadius(12)
 
           Column() {
             Button('再来一局')
-              .width(this.isSmallScreen ? 200 : 260)
-              .height(this.isSmallScreen ? 44 : 56)
-              .fontSize(this.isSmallScreen ? 18 : 22)
+              .width(getSizeValue(GP.gameOverButtonWidth, this.isSmallScreen))
+              .height(getSizeValue(GP.gameOverButtonHeight, this.isSmallScreen))
+              .fontSize(getSizeValue(GP.gameOverButtonFontSize, this.isSmallScreen))
               .backgroundColor('#4ECDC4')
               .borderRadius(28)
+              .shadow({ radius: 8, color: 'rgba(78,205,196,0.4)', offsetX: 0, offsetY: 3 })
               .onClick(() => {
                 this.stopGame();
                 this.isGameOver = false;
@@ -406,25 +777,28 @@ struct GamePage {
               })
 
             Button('返回首页')
-              .width(this.isSmallScreen ? 200 : 260)
-              .height(this.isSmallScreen ? 44 : 56)
-              .fontSize(this.isSmallScreen ? 18 : 22)
+              .width(getSizeValue(GP.gameOverButtonWidth, this.isSmallScreen))
+              .height(getSizeValue(GP.gameOverButtonHeight, this.isSmallScreen))
+              .fontSize(getSizeValue(GP.gameOverButtonFontSize, this.isSmallScreen))
               .backgroundColor('#FF6B6B')
               .borderRadius(28)
-              .margin({ top: 15 })
+              .shadow({ radius: 8, color: 'rgba(255,107,107,0.4)', offsetX: 0, offsetY: 3 })
+              .margin({ top: 12 })
               .onClick(() => {
                 router.back();
               })
           }
-          .margin({ top: 30 })
+          .margin({ top: 24 })
           .alignItems(HorizontalAlign.Center)
         }
-        .width(this.isSmallScreen ? '70%' : '60%')
-        .padding(this.isSmallScreen ? 30 : 40)
-        .backgroundColor('rgba(0, 0, 0, 0.85)')
-        .borderRadius(20)
+        .width(getStringValue(GP.gameOverPanelWidth, this.isSmallScreen))
+        .padding(getSizeValue(GP.gameOverPanelPadding, this.isSmallScreen))
+        .backgroundColor('rgba(15, 15, 40, 0.92)')
+        .borderRadius(24)
+        .border({ width: 1, color: 'rgba(255,255,255,0.1)' })
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
+        .shadow({ radius: 30, color: 'rgba(0,0,0,0.5)', offsetX: 0, offsetY: 10 })
       }
     }
     .width('100%')
@@ -433,12 +807,10 @@ struct GamePage {
   }
 }
 
-// 导出获取记录的函数
 export function getGameRecords(): GameRecord[] {
   return gameRecords;
 }
 
-// 导出清除记录的函数
 export function clearGameRecords(): void {
   gameRecords = [];
 }

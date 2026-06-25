@@ -1,10 +1,15 @@
-Ôr@Ÿªassertions¤code´customTransformCache¬dependencies¢id¤meta±moduleSideEffects¬originalCode±originalSourcemap«resolvedIds®sourcemapChainµsyntheticNamedExportsµtransformDependencies®transformFiles¨cacheAstÔrAÚwuif (!("finalizeConstruction" in ViewPU.prototype)) {
+Ôr@Ÿªassertions¤code´customTransformCache¬dependencies¢id¤meta±moduleSideEffects¬originalCode±originalSourcemap«resolvedIds®sourcemapChainµsyntheticNamedExportsµtransformDependencies®transformFiles¨cacheAstÔrAÚõhif (!("finalizeConstruction" in ViewPU.prototype)) {
     Reflect.set(ViewPU.prototype, "finalizeConstruction", () => { });
 }
 import router from '@ohos.router';
-// å…¨å±€å˜é‡å­˜å‚¨æ¸¸æˆè®°å½•
+import { ScreenAdapter } from '../utils/ScreenAdapter';
+import { GamePage as GP, CastUI, getSizeValue, getStringValue } from '../constants/LayoutConstants';
+import { DeviceCastManager, CastConnectionState } from '../cast/DeviceCastManager';
+import { DistributedGameData } from '../cast/DistributedGameData';
+import { DeviceSelectPanel } from '../cast/DeviceSelectPanel';
+import { CastStatusBar } from '../cast/CastStatusBar';
 let gameRecords = [];
-// é¶å­å¤§å°é€‰é¡¹
+let countOptions = [1, 2, 3, 4, 5];
 let sizeOptions = [
     { value: 1, label: 'å°' },
     { value: 2, label: 'ä¸­' },
@@ -26,6 +31,19 @@ class GamePage extends ViewPU {
         this.__targetSize = new ObservedPropertySimplePU(2, this, "targetSize");
         this.__gameDuration = new ObservedPropertySimplePU(30, this, "gameDuration");
         this.__isGamePreparing = new ObservedPropertySimplePU(true, this, "isGamePreparing");
+        this.__connectionState = new ObservedPropertySimplePU(CastConnectionState.DISCONNECTED, this, "connectionState");
+        this.__targetDeviceName = new ObservedPropertySimplePU('', this, "targetDeviceName");
+        this.__discoveredDevices = new ObservedPropertyObjectPU([], this, "discoveredDevices");
+        this.__isDiscovering = new ObservedPropertySimplePU(false, this, "isDiscovering");
+        this.__isDistributedSupported = new ObservedPropertySimplePU(false, this, "isDistributedSupported");
+        this.__hitCount = new ObservedPropertySimplePU(0, this, "hitCount");
+        this.__missCount = new ObservedPropertySimplePU(0, this, "missCount");
+        this.__combo = new ObservedPropertySimplePU(0, this, "combo");
+        this.__maxCombo = new ObservedPropertySimplePU(0, this, "maxCombo");
+        this.__lastHitTime = new ObservedPropertySimplePU(0, this, "lastHitTime");
+        this.__totalReactionMs = new ObservedPropertySimplePU(0, this, "totalReactionMs");
+        this.__dots = new ObservedPropertyObjectPU([], this, "dots");
+        this.__animOffset = new ObservedPropertySimplePU(0, this, "animOffset");
         this.gameTimer = -1;
         this.targetTimer = -1;
         this.targetId = 0;
@@ -33,6 +51,53 @@ class GamePage extends ViewPU {
         this.gameAreaHeight = 0;
         this.MAX_ATTEMPTS = 100;
         this.PADDING = 10;
+        this.gameStartTime = 0;
+        this.castManager = DeviceCastManager.getInstance();
+        this.distributedData = new DistributedGameData();
+        this.dotId = 0;
+        this.bgAnimTimer = -1;
+        this.deviceSelectDialogController = new CustomDialogController({
+            builder: () => {
+                let jsDialog = new DeviceSelectPanel(this, {
+                    devices: this.discoveredDevices,
+                    connectionState: this.connectionState,
+                    isDiscovering: this.isDiscovering,
+                    isSmallScreen: this.isSmallScreen,
+                    onDeviceSelect: (deviceId) => {
+                        this.onDeviceSelected(deviceId);
+                    },
+                    onClose: () => {
+                        this.castManager.stopDeviceDiscovery();
+                        this.isDiscovering = false;
+                    },
+                    onRetry: () => {
+                        this.startDeviceDiscovery();
+                    }
+                }, undefined, -1, () => { }, { page: "entry/src/main/ets/pages/GamePage.ets", line: 92, col: 14 });
+                jsDialog.setController(this.deviceSelectDialogController);
+                ViewPU.create(jsDialog);
+                let paramsLambda = () => {
+                    return {
+                        devices: this.discoveredDevices,
+                        connectionState: this.connectionState,
+                        isDiscovering: this.isDiscovering,
+                        isSmallScreen: this.isSmallScreen,
+                        onDeviceSelect: (deviceId) => {
+                            this.onDeviceSelected(deviceId);
+                        },
+                        onClose: () => {
+                            this.castManager.stopDeviceDiscovery();
+                            this.isDiscovering = false;
+                        },
+                        onRetry: () => {
+                            this.startDeviceDiscovery();
+                        }
+                    };
+                };
+                jsDialog.paramsGenerator_ = paramsLambda;
+            },
+            autoCancel: true
+        }, this);
         this.setInitiallyProvidedValue(params);
         this.finalizeConstruction();
     }
@@ -67,6 +132,45 @@ class GamePage extends ViewPU {
         if (params.isGamePreparing !== undefined) {
             this.isGamePreparing = params.isGamePreparing;
         }
+        if (params.connectionState !== undefined) {
+            this.connectionState = params.connectionState;
+        }
+        if (params.targetDeviceName !== undefined) {
+            this.targetDeviceName = params.targetDeviceName;
+        }
+        if (params.discoveredDevices !== undefined) {
+            this.discoveredDevices = params.discoveredDevices;
+        }
+        if (params.isDiscovering !== undefined) {
+            this.isDiscovering = params.isDiscovering;
+        }
+        if (params.isDistributedSupported !== undefined) {
+            this.isDistributedSupported = params.isDistributedSupported;
+        }
+        if (params.hitCount !== undefined) {
+            this.hitCount = params.hitCount;
+        }
+        if (params.missCount !== undefined) {
+            this.missCount = params.missCount;
+        }
+        if (params.combo !== undefined) {
+            this.combo = params.combo;
+        }
+        if (params.maxCombo !== undefined) {
+            this.maxCombo = params.maxCombo;
+        }
+        if (params.lastHitTime !== undefined) {
+            this.lastHitTime = params.lastHitTime;
+        }
+        if (params.totalReactionMs !== undefined) {
+            this.totalReactionMs = params.totalReactionMs;
+        }
+        if (params.dots !== undefined) {
+            this.dots = params.dots;
+        }
+        if (params.animOffset !== undefined) {
+            this.animOffset = params.animOffset;
+        }
         if (params.gameTimer !== undefined) {
             this.gameTimer = params.gameTimer;
         }
@@ -88,6 +192,24 @@ class GamePage extends ViewPU {
         if (params.PADDING !== undefined) {
             this.PADDING = params.PADDING;
         }
+        if (params.gameStartTime !== undefined) {
+            this.gameStartTime = params.gameStartTime;
+        }
+        if (params.castManager !== undefined) {
+            this.castManager = params.castManager;
+        }
+        if (params.distributedData !== undefined) {
+            this.distributedData = params.distributedData;
+        }
+        if (params.dotId !== undefined) {
+            this.dotId = params.dotId;
+        }
+        if (params.bgAnimTimer !== undefined) {
+            this.bgAnimTimer = params.bgAnimTimer;
+        }
+        if (params.deviceSelectDialogController !== undefined) {
+            this.deviceSelectDialogController = params.deviceSelectDialogController;
+        }
     }
     updateStateVars(params) {
     }
@@ -102,6 +224,19 @@ class GamePage extends ViewPU {
         this.__targetSize.purgeDependencyOnElmtId(rmElmtId);
         this.__gameDuration.purgeDependencyOnElmtId(rmElmtId);
         this.__isGamePreparing.purgeDependencyOnElmtId(rmElmtId);
+        this.__connectionState.purgeDependencyOnElmtId(rmElmtId);
+        this.__targetDeviceName.purgeDependencyOnElmtId(rmElmtId);
+        this.__discoveredDevices.purgeDependencyOnElmtId(rmElmtId);
+        this.__isDiscovering.purgeDependencyOnElmtId(rmElmtId);
+        this.__isDistributedSupported.purgeDependencyOnElmtId(rmElmtId);
+        this.__hitCount.purgeDependencyOnElmtId(rmElmtId);
+        this.__missCount.purgeDependencyOnElmtId(rmElmtId);
+        this.__combo.purgeDependencyOnElmtId(rmElmtId);
+        this.__maxCombo.purgeDependencyOnElmtId(rmElmtId);
+        this.__lastHitTime.purgeDependencyOnElmtId(rmElmtId);
+        this.__totalReactionMs.purgeDependencyOnElmtId(rmElmtId);
+        this.__dots.purgeDependencyOnElmtId(rmElmtId);
+        this.__animOffset.purgeDependencyOnElmtId(rmElmtId);
     }
     aboutToBeDeleted() {
         this.__score.aboutToBeDeleted();
@@ -114,6 +249,19 @@ class GamePage extends ViewPU {
         this.__targetSize.aboutToBeDeleted();
         this.__gameDuration.aboutToBeDeleted();
         this.__isGamePreparing.aboutToBeDeleted();
+        this.__connectionState.aboutToBeDeleted();
+        this.__targetDeviceName.aboutToBeDeleted();
+        this.__discoveredDevices.aboutToBeDeleted();
+        this.__isDiscovering.aboutToBeDeleted();
+        this.__isDistributedSupported.aboutToBeDeleted();
+        this.__hitCount.aboutToBeDeleted();
+        this.__missCount.aboutToBeDeleted();
+        this.__combo.aboutToBeDeleted();
+        this.__maxCombo.aboutToBeDeleted();
+        this.__lastHitTime.aboutToBeDeleted();
+        this.__totalReactionMs.aboutToBeDeleted();
+        this.__dots.aboutToBeDeleted();
+        this.__animOffset.aboutToBeDeleted();
         SubscriberManager.Get().delete(this.id__());
         this.aboutToBeDeletedInternal();
     }
@@ -177,42 +325,218 @@ class GamePage extends ViewPU {
     set isGamePreparing(newValue) {
         this.__isGamePreparing.set(newValue);
     }
+    get connectionState() {
+        return this.__connectionState.get();
+    }
+    set connectionState(newValue) {
+        this.__connectionState.set(newValue);
+    }
+    get targetDeviceName() {
+        return this.__targetDeviceName.get();
+    }
+    set targetDeviceName(newValue) {
+        this.__targetDeviceName.set(newValue);
+    }
+    get discoveredDevices() {
+        return this.__discoveredDevices.get();
+    }
+    set discoveredDevices(newValue) {
+        this.__discoveredDevices.set(newValue);
+    }
+    get isDiscovering() {
+        return this.__isDiscovering.get();
+    }
+    set isDiscovering(newValue) {
+        this.__isDiscovering.set(newValue);
+    }
+    get isDistributedSupported() {
+        return this.__isDistributedSupported.get();
+    }
+    set isDistributedSupported(newValue) {
+        this.__isDistributedSupported.set(newValue);
+    }
+    get hitCount() {
+        return this.__hitCount.get();
+    }
+    set hitCount(newValue) {
+        this.__hitCount.set(newValue);
+    }
+    get missCount() {
+        return this.__missCount.get();
+    }
+    set missCount(newValue) {
+        this.__missCount.set(newValue);
+    }
+    get combo() {
+        return this.__combo.get();
+    }
+    set combo(newValue) {
+        this.__combo.set(newValue);
+    }
+    get maxCombo() {
+        return this.__maxCombo.get();
+    }
+    set maxCombo(newValue) {
+        this.__maxCombo.set(newValue);
+    }
+    get lastHitTime() {
+        return this.__lastHitTime.get();
+    }
+    set lastHitTime(newValue) {
+        this.__lastHitTime.set(newValue);
+    }
+    get totalReactionMs() {
+        return this.__totalReactionMs.get();
+    }
+    set totalReactionMs(newValue) {
+        this.__totalReactionMs.set(newValue);
+    }
+    get dots() {
+        return this.__dots.get();
+    }
+    set dots(newValue) {
+        this.__dots.set(newValue);
+    }
+    get animOffset() {
+        return this.__animOffset.get();
+    }
+    set animOffset(newValue) {
+        this.__animOffset.set(newValue);
+    }
     aboutToAppear() {
-        this.isSmallScreen = false;
+        this.isSmallScreen = ScreenAdapter.initScreenDetection();
+        ScreenAdapter.registerListener((isSmall) => {
+            this.isSmallScreen = isSmall;
+        });
         this.isGamePreparing = true;
+        this.initCast();
+        this.initDots();
+        this.startBgAnimation();
     }
     aboutToDisappear() {
+        ScreenAdapter.unregisterListener();
         this.stopGame();
+        this.distributedData.destroy();
+        if (this.bgAnimTimer !== -1) {
+            clearInterval(this.bgAnimTimer);
+        }
     }
-    // è·å–å½“å‰é¶å­åŠå¾„ï¼ˆæ ¹æ®å¤§å°é€‰æ‹©ï¼‰
+    initDots() {
+        for (let i = 0; i < 12; i++) {
+            this.dots.push({
+                id: this.dotId++,
+                x: Math.random() * 100,
+                y: Math.random() * 100,
+                size: 2 + Math.random() * 4,
+                opacity: 0.05 + Math.random() * 0.2,
+                speed: 0.05 + Math.random() * 0.12
+            });
+        }
+    }
+    startBgAnimation() {
+        this.bgAnimTimer = setInterval(() => {
+            this.animOffset += 1;
+            const updated = [];
+            for (const d of this.dots) {
+                let newY = d.y - d.speed;
+                if (newY < -5)
+                    newY = 105;
+                updated.push({
+                    id: d.id,
+                    x: d.x + Math.sin(this.animOffset * 0.02 + d.id) * 0.03,
+                    y: newY,
+                    size: d.size,
+                    opacity: d.opacity,
+                    speed: d.speed
+                });
+            }
+            this.dots = updated;
+        }, 50);
+    }
+    initCast() {
+        this.castManager.init();
+        this.isDistributedSupported = this.castManager.isDistributedSupported();
+        this.castManager.setOnConnectionStateChange((state) => {
+            this.connectionState = state;
+            if (state === CastConnectionState.CONNECTED) {
+                this.targetDeviceName = this.castManager.getConnectedDeviceName();
+                const sessionId = 'targetgame_' + Date.now();
+                this.distributedData.createDistributedObject(sessionId);
+                this.distributedData.onRemoteControl((event) => {
+                    this.handleRemoteControl(event);
+                });
+            }
+            else if (state === CastConnectionState.DISCONNECTED) {
+                this.targetDeviceName = '';
+                this.distributedData.destroy();
+            }
+        });
+        this.castManager.setOnDeviceListChange((devices) => {
+            this.discoveredDevices = devices;
+        });
+    }
+    startDeviceDiscovery() {
+        this.isDiscovering = true;
+        this.discoveredDevices = [];
+        this.castManager.startDeviceDiscovery();
+        setTimeout(() => {
+            this.isDiscovering = false;
+        }, 5000);
+    }
+    async onDeviceSelected(deviceId) {
+        const success = await this.castManager.connectDevice(deviceId);
+        if (success) {
+            this.deviceSelectDialogController.close();
+            this.castManager.stopDeviceDiscovery();
+            this.isDiscovering = false;
+        }
+    }
+    disconnectCast() {
+        this.castManager.disconnectDevice();
+    }
+    syncGameStateToRemote() {
+        if (this.connectionState !== CastConnectionState.CONNECTED) {
+            return;
+        }
+        const state = {
+            score: this.score,
+            timeLeft: this.timeLeft,
+            targetsJson: JSON.stringify(this.targets),
+            isGameRunning: this.isGameRunning,
+            isGameOver: this.isGameOver,
+            isGamePreparing: this.isGamePreparing,
+            targetCount: this.targetCount,
+            targetSize: this.targetSize,
+            gameDuration: this.gameDuration
+        };
+        this.distributedData.syncGameState(state);
+    }
+    handleRemoteControl(event) {
+        if (event.type === 'hit') {
+            const target = this.targets.find(t => t.id === event.targetId);
+            if (target) {
+                this.hitTarget(target);
+            }
+        }
+    }
     getTargetRadius() {
-        if (this.isSmallScreen) {
-            if (this.targetSize === 1)
-                return 20; // å°
-            if (this.targetSize === 2)
-                return 30; // ä¸­
-            return 40; // å¤§
+        if (this.targetSize === 1) {
+            return getSizeValue(GP.targetRadiusSmall, this.isSmallScreen);
         }
-        else {
-            if (this.targetSize === 1)
-                return 35; // å°
-            if (this.targetSize === 2)
-                return 55; // ä¸­
-            return 75; // å¤§
+        if (this.targetSize === 2) {
+            return getSizeValue(GP.targetRadiusMedium, this.isSmallScreen);
         }
+        return getSizeValue(GP.targetRadiusLarge, this.isSmallScreen);
     }
-    // ä½ç½®éªŒè¯æ–¹æ³•ï¼šæ£€æŸ¥ç»™å®šä½ç½®æ˜¯å¦æœ‰æ•ˆï¼ˆä¸è¶…å‡ºè¾¹ç•Œä¸”ä¸ä¸å·²å­˜åœ¨é¶å­é‡å ï¼‰
     isPositionValid(x, y, radius) {
-        const areaWidth = this.gameAreaWidth || (this.isSmallScreen ? 300 : 500);
-        const areaHeight = this.gameAreaHeight || (this.isSmallScreen ? 400 : 600);
-        // è¾¹ç•ŒéªŒè¯
+        const areaWidth = this.gameAreaWidth || getSizeValue(GP.defaultAreaWidth, this.isSmallScreen);
+        const areaHeight = this.gameAreaHeight || getSizeValue(GP.defaultAreaHeight, this.isSmallScreen);
         if (x < radius || x > areaWidth - radius) {
             return false;
         }
         if (y < radius || y > areaHeight - radius) {
             return false;
         }
-        // è·ç¦»éªŒè¯ï¼šæ£€æŸ¥ä¸æ‰€æœ‰å·²å­˜åœ¨é¶å­çš„è·ç¦»
         for (const existingTarget of this.targets) {
             const distanceSquared = (x - existingTarget.x) ** 2 + (y - existingTarget.y) ** 2;
             const minDistanceSquared = (radius + existingTarget.radius + this.PADDING) ** 2;
@@ -221,6 +545,17 @@ class GamePage extends ViewPU {
             }
         }
         return true;
+    }
+    getAccuracy() {
+        const total = this.hitCount + this.missCount;
+        if (total === 0)
+            return 0;
+        return Math.round((this.hitCount / total) * 100);
+    }
+    getAvgReactionMs() {
+        if (this.hitCount === 0)
+            return 0;
+        return Math.round(this.totalReactionMs / this.hitCount);
     }
     startGame() {
         this.stopGame();
@@ -231,7 +566,13 @@ class GamePage extends ViewPU {
         this.isGameOver = false;
         this.isGamePreparing = false;
         this.targetId = 0;
-        // å»¶è¿Ÿç”Ÿæˆé¶å­ï¼Œç¡®ä¿æ¸¸æˆåŒºåŸŸå°ºå¯¸å·²é€šè¿‡onAreaChangeè·å–
+        this.hitCount = 0;
+        this.missCount = 0;
+        this.combo = 0;
+        this.maxCombo = 0;
+        this.lastHitTime = 0;
+        this.totalReactionMs = 0;
+        this.gameStartTime = Date.now();
         setTimeout(() => {
             this.fillTargets();
         }, 100);
@@ -240,26 +581,23 @@ class GamePage extends ViewPU {
             if (this.timeLeft <= 0) {
                 this.endGame();
             }
+            this.syncGameStateToRemote();
         }, 1000);
     }
-    // è¡¥å……é¶å­åˆ° targetCount ä¸ª
     fillTargets() {
         const needCount = this.targetCount - this.targets.length;
         for (let i = 0; i < needCount; i++) {
             this.createOneTarget();
         }
     }
-    // åˆ›å»ºå•ä¸ªé¶å­ï¼ˆå›ºå®šå¤§å°ï¼Œä¸è‡ªåŠ¨æ¶ˆå¤±ï¼‰
     createOneTarget() {
         const radius = this.getTargetRadius();
-        const areaWidth = this.gameAreaWidth || (this.isSmallScreen ? 300 : 500);
-        const areaHeight = this.gameAreaHeight || (this.isSmallScreen ? 400 : 600);
-        // è®¡ç®—æœ‰æ•ˆåŒºåŸŸè¾¹ç•Œ
+        const areaWidth = this.gameAreaWidth || getSizeValue(GP.defaultAreaWidth, this.isSmallScreen);
+        const areaHeight = this.gameAreaHeight || getSizeValue(GP.defaultAreaHeight, this.isSmallScreen);
         const minX = radius;
         const maxX = areaWidth - radius;
         const minY = radius;
         const maxY = areaHeight - radius;
-        // å°è¯•-éªŒè¯-é‡è¯•æœºåˆ¶ï¼šæœ€å¤šå°è¯• MAX_ATTEMPTS æ¬¡
         for (let i = 0; i < this.MAX_ATTEMPTS; i++) {
             const x = minX + Math.random() * (maxX - minX);
             const y = minY + Math.random() * (maxY - minY);
@@ -275,19 +613,34 @@ class GamePage extends ViewPU {
                 return;
             }
         }
-        // è¶…è¿‡æœ€å¤§å°è¯•æ¬¡æ•°ï¼Œæ”¾å¼ƒç”Ÿæˆ
     }
     hitTarget(target) {
         if (!this.isGameRunning)
             return;
-        const baseScore = this.isSmallScreen ? 30 : 50;
+        const now = Date.now();
+        if (this.lastHitTime > 0) {
+            this.totalReactionMs += (now - this.lastHitTime);
+        }
+        this.lastHitTime = now;
+        const baseScore = getSizeValue(GP.baseScore, this.isSmallScreen);
         const scoreMultiplier = baseScore / target.radius;
         const points = Math.floor(10 * scoreMultiplier);
-        this.score += points;
-        // ç§»é™¤è¢«å‡»ä¸­çš„é¶å­
+        this.combo++;
+        if (this.combo > this.maxCombo) {
+            this.maxCombo = this.combo;
+        }
+        const comboBonus = this.combo > 1 ? Math.floor(points * (this.combo - 1) * 0.1) : 0;
+        this.score += points + comboBonus;
+        this.hitCount++;
         this.targets = this.targets.filter((t) => t.id !== target.id);
-        // ç«‹å³è¡¥å……é¶å­ï¼Œä¿æŒå±å¹•ä¸Šå§‹ç»ˆæœ‰ targetCount ä¸ª
         this.fillTargets();
+        this.syncGameStateToRemote();
+    }
+    onMissClick() {
+        if (!this.isGameRunning)
+            return;
+        this.missCount++;
+        this.combo = 0;
     }
     endGame() {
         this.isGameRunning = false;
@@ -295,6 +648,7 @@ class GamePage extends ViewPU {
         this.targets = [];
         this.stopGame();
         this.saveScore();
+        this.syncGameStateToRemote();
     }
     stopGame() {
         if (this.gameTimer !== -1) {
@@ -309,10 +663,13 @@ class GamePage extends ViewPU {
     saveScore() {
         const newRecord = {
             score: this.score,
-            date: new Date().toLocaleString()
+            date: new Date().toLocaleString(),
+            hits: this.hitCount,
+            misses: this.missCount,
+            maxCombo: this.maxCombo,
+            avgReactionMs: this.getAvgReactionMs()
         };
         gameRecords.push(newRecord);
-        // æŒ‰åˆ†æ•°æ’åºï¼Œä¿ç•™å‰10æ¡è®°å½•
         gameRecords.sort((a, b) => b.score - a.score);
         if (gameRecords.length > 10) {
             gameRecords = gameRecords.slice(0, 10);
@@ -331,14 +688,51 @@ class GamePage extends ViewPU {
             Column.height('100%');
             Column.linearGradient({
                 angle: 135,
-                colors: [['#667eea', 0.0], ['#764ba2', 1.0]]
+                colors: [['#1a1a3e', 0.0], ['#2d1b69', 0.5], ['#764ba2', 1.0]]
             });
             Column.justifyContent(FlexAlign.Center);
             Column.alignItems(HorizontalAlign.Center);
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
+            __Common__.create();
+            __Common__.margin({ top: 5 });
+        }, __Common__);
+        {
+            this.observeComponentCreation2((elmtId, isInitialRender) => {
+                if (isInitialRender) {
+                    let componentCall = new CastStatusBar(this, {
+                        connectionState: this.connectionState,
+                        targetDeviceName: this.targetDeviceName,
+                        isSmallScreen: this.isSmallScreen,
+                        onDisconnect: () => {
+                            this.disconnectCast();
+                        }
+                    }, undefined, elmtId, () => { }, { page: "entry/src/main/ets/pages/GamePage.ets", line: 410, col: 9 });
+                    ViewPU.create(componentCall);
+                    let paramsLambda = () => {
+                        return {
+                            connectionState: this.connectionState,
+                            targetDeviceName: this.targetDeviceName,
+                            isSmallScreen: this.isSmallScreen,
+                            onDisconnect: () => {
+                                this.disconnectCast();
+                            }
+                        };
+                    };
+                    componentCall.paramsGenerator_ = paramsLambda;
+                }
+                else {
+                    this.updateStateVarsOfChildByElmtId(elmtId, {
+                        connectionState: this.connectionState,
+                        targetDeviceName: this.targetDeviceName,
+                        isSmallScreen: this.isSmallScreen
+                    });
+                }
+            }, { name: "CastStatusBar" });
+        }
+        __Common__.pop();
+        this.observeComponentCreation2((elmtId, isInitialRender) => {
             If.create();
-            // å‡†å¤‡é˜¶æ®µï¼šæ˜¾ç¤ºé¶å­æ•°é‡é€‰æ‹© + é¶å­å¤§å°é€‰æ‹© + å¼€å§‹æŒ‰é’®
             if (this.isGamePreparing) {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
@@ -350,20 +744,19 @@ class GamePage extends ViewPU {
                     }, Column);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('æ‰“é¶è®­ç»ƒ');
-                        Text.fontSize(this.isSmallScreen ? 28 : 40);
+                        Text.fontSize(getSizeValue(GP.titleFontSize, this.isSmallScreen));
                         Text.fontColor('#FFFFFF');
                         Text.fontWeight(FontWeight.Bold);
+                        Text.textShadow({ radius: 8, color: 'rgba(0,0,0,0.3)', offsetX: 0, offsetY: 2 });
                     }, Text);
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
-                        // é¶å­æ•°é‡é€‰æ‹©åŒºåŸŸ
                         Row.create();
-                        // é¶å­æ•°é‡é€‰æ‹©åŒºåŸŸ
                         Row.margin({ top: 30 });
                     }, Row);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('é¶å­æ•°é‡:');
-                        Text.fontSize(this.isSmallScreen ? 16 : 20);
+                        Text.fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen));
                         Text.fontColor('#FFFFFF');
                         Text.fontWeight(FontWeight.Bold);
                     }, Text);
@@ -373,14 +766,15 @@ class GamePage extends ViewPU {
                         const forEachItemGenFunction = _item => {
                             const count = _item;
                             this.observeComponentCreation2((elmtId, isInitialRender) => {
-                                Button.createWithLabel(count.toString());
-                                Button.width(this.isSmallScreen ? 36 : 48);
-                                Button.height(this.isSmallScreen ? 36 : 48);
-                                Button.fontSize(this.isSmallScreen ? 16 : 20);
+                                Button.createWithLabel(count.toString(), { type: ButtonType.Normal });
+                                Button.width(getSizeValue(GP.countButtonSize, this.isSmallScreen));
+                                Button.height(getSizeValue(GP.countButtonSize, this.isSmallScreen));
+                                Button.fontSize(getSizeValue(GP.countButtonFontSize, this.isSmallScreen));
                                 Button.fontColor('#FFFFFF');
                                 Button.fontWeight(FontWeight.Bold);
-                                Button.backgroundColor(this.targetCount === count ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)');
-                                Button.borderRadius(this.isSmallScreen ? 18 : 24);
+                                Button.backgroundColor(this.targetCount === count ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)');
+                                Button.borderRadius(getSizeValue(GP.countButtonBorderRadius, this.isSmallScreen));
+                                Button.padding(0);
                                 Button.margin({ left: 8 });
                                 Button.onClick(() => {
                                     this.targetCount = count;
@@ -388,20 +782,17 @@ class GamePage extends ViewPU {
                             }, Button);
                             Button.pop();
                         };
-                        this.forEachUpdateFunction(elmtId, [1, 2, 3, 4, 5], forEachItemGenFunction, (count) => count.toString(), false, false);
+                        this.forEachUpdateFunction(elmtId, countOptions, forEachItemGenFunction, (count) => count.toString(), false, false);
                     }, ForEach);
                     ForEach.pop();
-                    // é¶å­æ•°é‡é€‰æ‹©åŒºåŸŸ
                     Row.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
-                        // é¶å­å¤§å°é€‰æ‹©åŒºåŸŸ
                         Row.create();
-                        // é¶å­å¤§å°é€‰æ‹©åŒºåŸŸ
                         Row.margin({ top: 20 });
                     }, Row);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('é¶å­å¤§å°:');
-                        Text.fontSize(this.isSmallScreen ? 16 : 20);
+                        Text.fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen));
                         Text.fontColor('#FFFFFF');
                         Text.fontWeight(FontWeight.Bold);
                     }, Text);
@@ -412,13 +803,13 @@ class GamePage extends ViewPU {
                             const item = _item;
                             this.observeComponentCreation2((elmtId, isInitialRender) => {
                                 Button.createWithLabel(item.label);
-                                Button.width(this.isSmallScreen ? 50 : 64);
-                                Button.height(this.isSmallScreen ? 36 : 48);
-                                Button.fontSize(this.isSmallScreen ? 16 : 20);
+                                Button.width(getSizeValue(GP.sizeButtonWidth, this.isSmallScreen));
+                                Button.height(getSizeValue(GP.sizeButtonHeight, this.isSmallScreen));
+                                Button.fontSize(getSizeValue(GP.sizeButtonFontSize, this.isSmallScreen));
                                 Button.fontColor('#FFFFFF');
                                 Button.fontWeight(FontWeight.Bold);
-                                Button.backgroundColor(this.targetSize === item.value ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)');
-                                Button.borderRadius(this.isSmallScreen ? 18 : 24);
+                                Button.backgroundColor(this.targetSize === item.value ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)');
+                                Button.borderRadius(getSizeValue(GP.sizeButtonBorderRadius, this.isSmallScreen));
                                 Button.margin({ left: 8 });
                                 Button.onClick(() => {
                                     this.targetSize = item.value;
@@ -429,17 +820,14 @@ class GamePage extends ViewPU {
                         this.forEachUpdateFunction(elmtId, sizeOptions, forEachItemGenFunction, (item) => item.value.toString(), false, false);
                     }, ForEach);
                     ForEach.pop();
-                    // é¶å­å¤§å°é€‰æ‹©åŒºåŸŸ
                     Row.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
-                        // æ¸¸æˆæ—¶é•¿é€‰æ‹©åŒºåŸŸ
                         Row.create();
-                        // æ¸¸æˆæ—¶é•¿é€‰æ‹©åŒºåŸŸ
                         Row.margin({ top: 20 });
                     }, Row);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('æ¸¸æˆæ—¶é•¿:');
-                        Text.fontSize(this.isSmallScreen ? 16 : 20);
+                        Text.fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen));
                         Text.fontColor('#FFFFFF');
                         Text.fontWeight(FontWeight.Bold);
                     }, Text);
@@ -450,13 +838,13 @@ class GamePage extends ViewPU {
                             const duration = _item;
                             this.observeComponentCreation2((elmtId, isInitialRender) => {
                                 Button.createWithLabel(duration + 's');
-                                Button.width(this.isSmallScreen ? 60 : 80);
-                                Button.height(this.isSmallScreen ? 36 : 48);
-                                Button.fontSize(this.isSmallScreen ? 14 : 18);
+                                Button.width(getSizeValue(GP.durationButtonWidth, this.isSmallScreen));
+                                Button.height(getSizeValue(GP.durationButtonHeight, this.isSmallScreen));
+                                Button.fontSize(getSizeValue(GP.durationButtonFontSize, this.isSmallScreen));
                                 Button.fontColor('#FFFFFF');
                                 Button.fontWeight(FontWeight.Bold);
-                                Button.backgroundColor(this.gameDuration === duration ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)');
-                                Button.borderRadius(this.isSmallScreen ? 18 : 24);
+                                Button.backgroundColor(this.gameDuration === duration ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)');
+                                Button.borderRadius(getSizeValue(GP.durationButtonBorderRadius, this.isSmallScreen));
                                 Button.margin({ left: 8 });
                                 Button.onClick(() => {
                                     this.gameDuration = duration;
@@ -467,25 +855,50 @@ class GamePage extends ViewPU {
                         this.forEachUpdateFunction(elmtId, [15, 30, 60], forEachItemGenFunction, (duration) => duration.toString(), false, false);
                     }, ForEach);
                     ForEach.pop();
-                    // æ¸¸æˆæ—¶é•¿é€‰æ‹©åŒºåŸŸ
                     Row.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Button.createWithLabel('å¼€å§‹æ¸¸æˆ');
-                        Button.width(this.isSmallScreen ? 200 : 280);
-                        Button.height(this.isSmallScreen ? 50 : 70);
-                        Button.fontSize(this.isSmallScreen ? 20 : 28);
+                        Button.width(getSizeValue(GP.startButtonWidth, this.isSmallScreen));
+                        Button.height(getSizeValue(GP.startButtonHeight, this.isSmallScreen));
+                        Button.fontSize(getSizeValue(GP.startButtonFontSize, this.isSmallScreen));
                         Button.backgroundColor('#4ECDC4');
                         Button.borderRadius(35);
+                        Button.shadow({ radius: 12, color: 'rgba(78,205,196,0.4)', offsetX: 0, offsetY: 4 });
                         Button.margin({ top: 40 });
                         Button.onClick(() => {
                             this.startGame();
                         });
                     }, Button);
                     Button.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        If.create();
+                        if (this.isDistributedSupported) {
+                            this.ifElseBranchUpdateFunction(0, () => {
+                                this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                    Button.createWithLabel('è·¨è®¾å¤‡æŠ•é€');
+                                    Button.width(getSizeValue(CastUI.castButtonWidth, this.isSmallScreen));
+                                    Button.height(getSizeValue(CastUI.castButtonHeight, this.isSmallScreen));
+                                    Button.fontSize(getSizeValue(CastUI.castButtonFontSize, this.isSmallScreen));
+                                    Button.backgroundColor('#667eea');
+                                    Button.borderRadius(35);
+                                    Button.margin({ top: 20 });
+                                    Button.onClick(() => {
+                                        this.startDeviceDiscovery();
+                                        this.deviceSelectDialogController.open();
+                                    });
+                                }, Button);
+                                Button.pop();
+                            });
+                        }
+                        else {
+                            this.ifElseBranchUpdateFunction(1, () => {
+                            });
+                        }
+                    }, If);
+                    If.pop();
                     Column.pop();
                 });
             }
-            // æ¸¸æˆè¿›è¡Œä¸­ï¼šæ˜¾ç¤ºå¾—åˆ†/æ—¶é—´ + æ¸¸æˆåŒºåŸŸ
             else {
                 this.ifElseBranchUpdateFunction(1, () => {
                 });
@@ -494,52 +907,148 @@ class GamePage extends ViewPU {
         If.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             If.create();
-            // æ¸¸æˆè¿›è¡Œä¸­ï¼šæ˜¾ç¤ºå¾—åˆ†/æ—¶é—´ + æ¸¸æˆåŒºåŸŸ
             if (!this.isGamePreparing && !this.isGameOver) {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.width('100%');
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Row.create();
-                        Row.width('90%');
-                        Row.padding(this.isSmallScreen ? 10 : 20);
-                        Row.backgroundColor('rgba(0, 0, 0, 0.3)');
-                        Row.borderRadius(15);
-                        Row.margin({ top: this.isSmallScreen ? 10 : 20 });
+                        Row.width('92%');
+                        Row.padding({ left: 16, right: 16, top: 12, bottom: 12 });
+                        Row.backgroundColor('rgba(0, 0, 0, 0.4)');
+                        Row.borderRadius(16);
+                        Row.margin({ top: getSizeValue(GP.scoreMarginTop, this.isSmallScreen) });
+                        Row.alignItems(VerticalAlign.Center);
                     }, Row);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
-                        Text.create(`å¾—åˆ†: ${this.score}`);
-                        Text.fontSize(this.isSmallScreen ? 20 : 28);
-                        Text.fontColor('#FFFFFF');
+                        Column.create();
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.score}`);
+                        Text.fontSize(this.isSmallScreen ? 28 : 36);
+                        Text.fontColor('#FFD700');
                         Text.fontWeight(FontWeight.Bold);
                     }, Text);
                     Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å¾—åˆ†');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.6)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Blank.create();
                     }, Blank);
                     Blank.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
-                        Text.create(`æ—¶é—´: ${this.timeLeft}s`);
-                        Text.fontSize(this.isSmallScreen ? 20 : 28);
-                        Text.fontColor('#FFFFFF');
+                        Column.create();
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.timeLeft}s`);
+                        Text.fontSize(this.isSmallScreen ? 28 : 36);
+                        Text.fontColor(this.timeLeft <= 5 ? '#FF6B6B' : '#FFFFFF');
                         Text.fontWeight(FontWeight.Bold);
                     }, Text);
                     Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å‰©ä½™æ—¶é—´');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.6)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Blank.create();
+                    }, Blank);
+                    Blank.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.getAccuracy()}%`);
+                        Text.fontSize(this.isSmallScreen ? 22 : 28);
+                        Text.fontColor('#4ECDC4');
+                        Text.fontWeight(FontWeight.Bold);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å‘½ä¸­ç‡');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.6)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        If.create();
+                        if (this.combo > 1) {
+                            this.ifElseBranchUpdateFunction(0, () => {
+                                this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                    Blank.create();
+                                }, Blank);
+                                Blank.pop();
+                                this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                    Column.create();
+                                    Column.alignItems(HorizontalAlign.Center);
+                                }, Column);
+                                this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                    Text.create(`x${this.combo}`);
+                                    Text.fontSize(this.isSmallScreen ? 22 : 28);
+                                    Text.fontColor('#FF6B6B');
+                                    Text.fontWeight(FontWeight.Bold);
+                                }, Text);
+                                Text.pop();
+                                this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                    Text.create('è¿å‡»');
+                                    Text.fontSize(this.isSmallScreen ? 11 : 13);
+                                    Text.fontColor('rgba(255,255,255,0.6)');
+                                }, Text);
+                                Text.pop();
+                                Column.pop();
+                            });
+                        }
+                        else {
+                            this.ifElseBranchUpdateFunction(1, () => {
+                            });
+                        }
+                    }, If);
+                    If.pop();
                     Row.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Progress.create({ value: this.timeLeft, total: this.gameDuration, type: ProgressType.Linear });
+                        Progress.width('92%');
+                        Progress.color(this.timeLeft <= 5 ? '#FF6B6B' : '#4ECDC4');
+                        Progress.backgroundColor('rgba(255,255,255,0.1)');
+                        Progress.borderRadius(4);
+                        Progress.margin({ top: 8 });
+                        Progress.style({ strokeWidth: this.isSmallScreen ? 6 : 8 });
+                    }, Progress);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Stack.create();
-                        Stack.width('90%');
-                        Stack.height(this.isSmallScreen ? '55%' : '65%');
-                        Stack.margin({ top: this.isSmallScreen ? 10 : 20 });
+                        Stack.width('92%');
+                        Stack.height(getStringValue(GP.gameAreaHeight, this.isSmallScreen));
+                        Stack.margin({ top: getSizeValue(GP.gameAreaMarginTop, this.isSmallScreen) });
                         Stack.onAreaChange((oldValue, newValue) => {
                             this.gameAreaWidth = newValue.width;
                             this.gameAreaHeight = newValue.height;
+                        });
+                        Stack.onClick(() => {
+                            this.onMissClick();
                         });
                     }, Stack);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
                         Column.width('100%');
                         Column.height('100%');
-                        Column.backgroundColor('rgba(255, 255, 255, 0.1)');
+                        Column.backgroundColor('rgba(255, 255, 255, 0.06)');
                         Column.borderRadius(20);
+                        Column.border({ width: 1, color: 'rgba(255,255,255,0.08)' });
                     }, Column);
                     Column.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
@@ -547,28 +1056,46 @@ class GamePage extends ViewPU {
                         const forEachItemGenFunction = _item => {
                             const target = _item;
                             this.observeComponentCreation2((elmtId, isInitialRender) => {
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.create();
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.width(target.radius * 2);
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.height(target.radius * 2);
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.fill('#FFFFFF');
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.position({ x: target.x - target.radius, y: target.y - target.radius });
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.opacity(target.opacity);
-                                // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-                                Circle.onClick(() => {
+                                Stack.create();
+                                Stack.width(target.radius * 2);
+                                Stack.height(target.radius * 2);
+                                Stack.position({ x: target.x - target.radius, y: target.y - target.radius });
+                                Stack.opacity(target.opacity);
+                                Stack.onClick(() => {
                                     this.hitTarget(target);
                                 });
+                            }, Stack);
+                            this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                Circle.create();
+                                Circle.width(target.radius * 2);
+                                Circle.height(target.radius * 2);
+                                Circle.fill('rgba(255, 107, 107, 0.15)');
                             }, Circle);
+                            this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                Circle.create();
+                                Circle.width(target.radius * 1.4);
+                                Circle.height(target.radius * 1.4);
+                                Circle.fill('rgba(255, 107, 107, 0.25)');
+                            }, Circle);
+                            this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                Circle.create();
+                                Circle.width(target.radius * 0.8);
+                                Circle.height(target.radius * 0.8);
+                                Circle.fill('#FF6B6B');
+                            }, Circle);
+                            this.observeComponentCreation2((elmtId, isInitialRender) => {
+                                Circle.create();
+                                Circle.width(target.radius * 0.35);
+                                Circle.height(target.radius * 0.35);
+                                Circle.fill('#FFFFFF');
+                            }, Circle);
+                            Stack.pop();
                         };
                         this.forEachUpdateFunction(elmtId, this.targets, forEachItemGenFunction, (target) => target.id.toString(), false, false);
                     }, ForEach);
                     ForEach.pop();
                     Stack.pop();
+                    Column.pop();
                 });
             }
             else {
@@ -579,22 +1106,38 @@ class GamePage extends ViewPU {
         If.pop();
         Column.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
+            ForEach.create();
+            const forEachItemGenFunction = _item => {
+                const dot = _item;
+                this.observeComponentCreation2((elmtId, isInitialRender) => {
+                    Circle.create();
+                    Circle.width(dot.size);
+                    Circle.height(dot.size);
+                    Circle.fill(`rgba(255, 255, 255, ${dot.opacity})`);
+                    Circle.position({ x: `${dot.x}%`, y: `${dot.y}%` });
+                }, Circle);
+            };
+            this.forEachUpdateFunction(elmtId, this.dots, forEachItemGenFunction, (dot) => dot.id.toString(), false, false);
+        }, ForEach);
+        ForEach.pop();
+        this.observeComponentCreation2((elmtId, isInitialRender) => {
             If.create();
-            // æ¸¸æˆç»“æŸé¢æ¿ â€” ä½¿ç”¨Stackå åŠ åœ¨å±å¹•ä¸­å¤®
             if (this.isGameOver) {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
-                        Column.width(this.isSmallScreen ? '70%' : '60%');
-                        Column.padding(this.isSmallScreen ? 30 : 40);
-                        Column.backgroundColor('rgba(0, 0, 0, 0.85)');
-                        Column.borderRadius(20);
+                        Column.width(getStringValue(GP.gameOverPanelWidth, this.isSmallScreen));
+                        Column.padding(getSizeValue(GP.gameOverPanelPadding, this.isSmallScreen));
+                        Column.backgroundColor('rgba(15, 15, 40, 0.92)');
+                        Column.borderRadius(24);
+                        Column.border({ width: 1, color: 'rgba(255,255,255,0.1)' });
                         Column.alignItems(HorizontalAlign.Center);
                         Column.justifyContent(FlexAlign.Center);
+                        Column.shadow({ radius: 30, color: 'rgba(0,0,0,0.5)', offsetX: 0, offsetY: 10 });
                     }, Column);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('æ¸¸æˆç»“æŸ!');
-                        Text.fontSize(this.isSmallScreen ? 28 : 36);
+                        Text.fontSize(getSizeValue(GP.gameOverTitleFontSize, this.isSmallScreen));
                         Text.fontColor('#FFFFFF');
                         Text.fontWeight(FontWeight.Bold);
                         Text.width('100%');
@@ -602,27 +1145,149 @@ class GamePage extends ViewPU {
                     }, Text);
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
-                        Text.create(`æœ€ç»ˆå¾—åˆ†: ${this.score}`);
-                        Text.fontSize(this.isSmallScreen ? 24 : 32);
+                        Text.create(`${this.score}`);
+                        Text.fontSize(this.isSmallScreen ? 48 : 64);
                         Text.fontColor('#FFD700');
                         Text.fontWeight(FontWeight.Bold);
                         Text.width('100%');
                         Text.textAlign(TextAlign.Center);
-                        Text.margin({ top: 20 });
+                        Text.margin({ top: 8 });
                     }, Text);
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('æœ€ç»ˆå¾—åˆ†');
+                        Text.fontSize(this.isSmallScreen ? 14 : 16);
+                        Text.fontColor('rgba(255,255,255,0.5)');
+                        Text.width('100%');
+                        Text.textAlign(TextAlign.Center);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Row.create();
+                        Row.width('100%');
+                        Row.margin({ top: 24 });
+                        Row.padding({ top: 16, bottom: 16 });
+                        Row.backgroundColor('rgba(255,255,255,0.05)');
+                        Row.borderRadius(12);
+                    }, Row);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
-                        Column.margin({ top: 30 });
+                        Column.layoutWeight(1);
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.hitCount}`);
+                        Text.fontSize(this.isSmallScreen ? 22 : 28);
+                        Text.fontColor('#4ECDC4');
+                        Text.fontWeight(FontWeight.Bold);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å‘½ä¸­');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.5)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.layoutWeight(1);
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.missCount}`);
+                        Text.fontSize(this.isSmallScreen ? 22 : 28);
+                        Text.fontColor('#FF6B6B');
+                        Text.fontWeight(FontWeight.Bold);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å¤±è¯¯');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.5)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.layoutWeight(1);
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.getAccuracy()}%`);
+                        Text.fontSize(this.isSmallScreen ? 22 : 28);
+                        Text.fontColor('#4ECDC4');
+                        Text.fontWeight(FontWeight.Bold);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å‘½ä¸­ç‡');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.5)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    Row.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Row.create();
+                        Row.width('100%');
+                        Row.margin({ top: 12 });
+                        Row.padding({ top: 16, bottom: 16 });
+                        Row.backgroundColor('rgba(255,255,255,0.05)');
+                        Row.borderRadius(12);
+                    }, Row);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.layoutWeight(1);
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`x${this.maxCombo}`);
+                        Text.fontSize(this.isSmallScreen ? 22 : 28);
+                        Text.fontColor('#FFD700');
+                        Text.fontWeight(FontWeight.Bold);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('æœ€å¤§è¿å‡»');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.5)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.layoutWeight(1);
+                        Column.alignItems(HorizontalAlign.Center);
+                    }, Column);
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create(`${this.getAvgReactionMs()}ms`);
+                        Text.fontSize(this.isSmallScreen ? 22 : 28);
+                        Text.fontColor('#667eea');
+                        Text.fontWeight(FontWeight.Bold);
+                    }, Text);
+                    Text.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Text.create('å¹³å‡ååº”');
+                        Text.fontSize(this.isSmallScreen ? 11 : 13);
+                        Text.fontColor('rgba(255,255,255,0.5)');
+                    }, Text);
+                    Text.pop();
+                    Column.pop();
+                    Row.pop();
+                    this.observeComponentCreation2((elmtId, isInitialRender) => {
+                        Column.create();
+                        Column.margin({ top: 24 });
                         Column.alignItems(HorizontalAlign.Center);
                     }, Column);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Button.createWithLabel('å†æ¥ä¸€å±€');
-                        Button.width(this.isSmallScreen ? 200 : 260);
-                        Button.height(this.isSmallScreen ? 44 : 56);
-                        Button.fontSize(this.isSmallScreen ? 18 : 22);
+                        Button.width(getSizeValue(GP.gameOverButtonWidth, this.isSmallScreen));
+                        Button.height(getSizeValue(GP.gameOverButtonHeight, this.isSmallScreen));
+                        Button.fontSize(getSizeValue(GP.gameOverButtonFontSize, this.isSmallScreen));
                         Button.backgroundColor('#4ECDC4');
                         Button.borderRadius(28);
+                        Button.shadow({ radius: 8, color: 'rgba(78,205,196,0.4)', offsetX: 0, offsetY: 3 });
                         Button.onClick(() => {
                             this.stopGame();
                             this.isGameOver = false;
@@ -633,12 +1298,13 @@ class GamePage extends ViewPU {
                     Button.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Button.createWithLabel('è¿”å›é¦–é¡µ');
-                        Button.width(this.isSmallScreen ? 200 : 260);
-                        Button.height(this.isSmallScreen ? 44 : 56);
-                        Button.fontSize(this.isSmallScreen ? 18 : 22);
+                        Button.width(getSizeValue(GP.gameOverButtonWidth, this.isSmallScreen));
+                        Button.height(getSizeValue(GP.gameOverButtonHeight, this.isSmallScreen));
+                        Button.fontSize(getSizeValue(GP.gameOverButtonFontSize, this.isSmallScreen));
                         Button.backgroundColor('#FF6B6B');
                         Button.borderRadius(28);
-                        Button.margin({ top: 15 });
+                        Button.shadow({ radius: 8, color: 'rgba(255,107,107,0.4)', offsetX: 0, offsetY: 3 });
+                        Button.margin({ top: 12 });
                         Button.onClick(() => {
                             router.back();
                         });
@@ -663,16 +1329,20 @@ class GamePage extends ViewPU {
         return "GamePage";
     }
 }
-// å¯¼å‡ºè·å–è®°å½•çš„å‡½æ•°
 export function getGameRecords() {
     return gameRecords;
 }
-// å¯¼å‡ºæ¸…é™¤è®°å½•çš„å‡½æ•°
 export function clearGameRecords() {
     gameRecords = [];
 }
 registerNamedRoute(() => new GamePage(undefined, {}), "", { bundleName: "com.example.targetgame", moduleName: "entry", pagePath: "pages/GamePage", pageFullPath: "entry/src/main/ets/pages/GamePage", integratedHsp: "false", moduleType: "followWithHap" });
-//# sourceMappingURL=GamePage.js.mapÂ‘ÙQ hvigor_ignore_E:_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.router.d.tsÙ:E:\lezihuawei\target\entry\src\main\ets\pages\GamePage.etsÔrBœªmoduleName±isLocalDependency¯isNodeEntryFile§pkgPath±belongProjectPath§pkgNameªpkgVersion±dependencyPkgInfo¯hostModulesInfo°belongModulePath§checker¬shouldEmitJs¥entryÃÂºE:\lezihuawei\target\entry´E:\lezihuawei\target¥entry¥1.0.0Ô  ‘ÔrC’²hostDependencyName®hostModuleNameª./GamePage¥entryºE:\lezihuawei\target\entryÔrDÜ ®¬getNodeCount²getIdentifierCount®getSymbolCount¬getTypeCountµgetInstantiationCountµgetRelationCacheSizes±isUndefinedSymbol±isArgumentsSymbol¯isUnknownSymbol¯getMergedSymbol®getDiagnostics´getGlobalDiagnostics´getRecursionIdentity¶getUnmatchedProperties¹getTypeOfSymbolAtLocation¯getTypeOfSymbolÙ(getSymbolsOfParameterPropertyDeclaration·getDeclaredTypeOfSymbol³getPropertiesOfType±getPropertyOfTypeÙ"getPrivateIdentifierPropertyOfType·getTypeOfPropertyOfType²getIndexInfoOfType³getIndexInfosOfTypeºgetIndexInfosOfIndexSymbol³getSignaturesOfType²getIndexTypeOfType¬getIndexType¬getBaseTypes¸getBaseTypeOfLiteralType®getWidenedType³getTypeFromTypeNode°getParameterTypeÙ$getParameterIdentifierNameAtPosition¸getPromisedTypeOfPromise®getAwaitedType¸getReturnTypeOfSignature®isNullableType¯getNullableType²getNonNullableType²getNonOptionalType°getTypeArguments®typeToTypeNodeÙ$indexInfoToIndexSignatureDeclaration¿signatureToSignatureDeclaration²symbolToEntityName²symbolToExpression¬symbolToNodeÙ!symbolToTypeParameterDeclarations¼symbolToParameterDeclarationºtypeParameterToDeclaration±getSymbolsInScope³getSymbolAtLocation·getIndexInfosAtLocationÙ!getShorthandAssignmentValueSymbolÙ#getExportSpecifierLocalTargetSymbol·getExportSymbolOfSymbol±getTypeAtLocationºgetTypeAtLocationForLinterÙ tryGetTypeAtLocationWithoutCheckºgetTypeOfAssignmentPatternÙ*getPropertySymbolOfDestructuringAssignment±signatureToString¬typeToString®symbolToStringµtypePredicateToString®writeSignature©writeType«writeSymbol²writeTypePredicate¼getAugmentedPropertiesOfType®getRootSymbols²getSymbolOfExpando±getContextualTypeÙ(getContextualTypeForObjectLiteralElementÙ#getContextualTypeForArgumentAtIndexÙ getContextualTypeForJsxAttribute²isContextSensitiveÙ!getTypeOfPropertyOfContextualTypeµgetFullyQualifiedNameÙ#tryGetResolvedSignatureWithoutCheck´getResolvedSignatureÙ/getResolvedSignatureForStringLiteralCompletionsÙ$getResolvedSignatureForSignatureHelpµgetExpandedParameters¹hasEffectiveRestParameterºcontainsArgumentsReference°getConstantValueµisValidPropertyAccessÙ#isValidPropertyAccessForCompletions»getSignatureFromDeclarationºisImplementationOfOverload¹getImmediateAliasedSymbol°getAliasedSymbol¯getEmitResolver²getExportsOfModule¿getExportsAndPropertiesOfModuleÙ forEachExportAndPropertyOfModule¯getSymbolWalker±getAmbientModules¹getJsxIntrinsicTagNamesAt³isOptionalParameter»tryGetMemberInModuleExportsÙ(tryGetMemberInModuleExportsAndProperties´tryFindAmbientModuleÙ(tryFindAmbientModuleWithoutAugmentations¯getApparentType¬getUnionType²isTypeAssignableTo³createAnonymousType¯createSignature¬createSymbol¯createIndexInfoªgetAnyType­getStringType­getNumberType±createPromiseType¯createArrayType¹getElementTypeOfArrayType®getBooleanType¬getFalseType«getTrueType«getVoidType°getUndefinedType«getNullType¯getESSymbolType¬getNeverType¯getOptionalType®getPromiseType²getPromiseLikeType´getAsyncIterableType²isSymbolAccessible«isArrayType«isTupleType¯isArrayLikeTypeÙ#isTypeInvalidDueToUnionDiscriminantºgetExactOptionalProperties¿getAllPossiblePropertiesOfTypesÙ(getSuggestedSymbolForNonexistentPropertyÙ#getSuggestionForNonexistentPropertyÙ,getSuggestedSymbolForNonexistentJSXAttributeÙ&getSuggestedSymbolForNonexistentSymbolÙ!getSuggestionForNonexistentSymbolÙ&getSuggestedSymbolForNonexistentModuleÙ!getSuggestionForNonexistentExportÙ+getSuggestedSymbolForNonexistentClassMember·getBaseConstraintOfType»getDefaultFromTypeParameter«resolveName¯getJsxNamespaceµgetJsxFragmentFactory¸getAccessibleSymbolChain»getTypePredicateOfSignature¹resolveExternalModuleName»resolveExternalModuleSymbol°tryGetThisTypeAt¹getTypeArgumentConstraint¸getSuggestionDiagnostics¸runWithCancellationTokenÙ3getLocalTypeParametersOfClassOrInterfaceOrTypeAlias´isDeclarationVisible´isPropertyAccessible»getTypeOnlyAliasDeclaration¿getMemberOverrideModifierStatusÙ!isTypeParameterPossiblyReferenced²getConstEnumRelate´clearConstEnumRelateµdeleteConstEnumRelateÙ$getTypeArgumentsForResolvedSignatureµgetCheckedSourceFilesÙ"collectHaveTsNoCheckFilesForLinter·clearQualifiedNameCache®isStaticRecord²isStaticSourceFileÔ  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  ÃÃÚ7wimport router from '@ohos.router';
+//# sourceMappingURL=GamePage.js.mapÂ—ÙQ hvigor_ignore_E:_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.router.d.tsÙ?E:\lezihuawei\target\entry\src\main\ets\utils\ScreenAdapter.etsÙEE:\lezihuawei\target\entry\src\main\ets\constants\LayoutConstants.etsÙBE:\lezihuawei\target\entry\src\main\ets\cast\DeviceCastManager.etsÙDE:\lezihuawei\target\entry\src\main\ets\cast\DistributedGameData.etsÙBE:\lezihuawei\target\entry\src\main\ets\cast\DeviceSelectPanel.etsÙ>E:\lezihuawei\target\entry\src\main\ets\cast\CastStatusBar.etsÙ:E:\lezihuawei\target\entry\src\main\ets\pages\GamePage.etsÔrBœªmoduleName±isLocalDependency¯isNodeEntryFile§pkgPath±belongProjectPath§pkgNameªpkgVersion±dependencyPkgInfo°belongModulePath§checker¬shouldEmitJs¯hostModulesInfo¥entryÃÂºE:\lezihuawei\target\entry´E:\lezihuawei\target¥entry¥1.0.0Ô  ºE:\lezihuawei\target\entryÔrCÜ ®¬getNodeCount²getIdentifierCount®getSymbolCount¬getTypeCountµgetInstantiationCountµgetRelationCacheSizes±isUndefinedSymbol±isArgumentsSymbol¯isUnknownSymbol¯getMergedSymbol®getDiagnostics´getGlobalDiagnostics´getRecursionIdentity¶getUnmatchedProperties¹getTypeOfSymbolAtLocation¯getTypeOfSymbolÙ(getSymbolsOfParameterPropertyDeclaration·getDeclaredTypeOfSymbol³getPropertiesOfType±getPropertyOfTypeÙ"getPrivateIdentifierPropertyOfType·getTypeOfPropertyOfType²getIndexInfoOfType³getIndexInfosOfTypeºgetIndexInfosOfIndexSymbol³getSignaturesOfType²getIndexTypeOfType¬getIndexType¬getBaseTypes¸getBaseTypeOfLiteralType®getWidenedType³getTypeFromTypeNode°getParameterTypeÙ$getParameterIdentifierNameAtPosition¸getPromisedTypeOfPromise®getAwaitedType¸getReturnTypeOfSignature®isNullableType¯getNullableType²getNonNullableType²getNonOptionalType°getTypeArguments®typeToTypeNodeÙ$indexInfoToIndexSignatureDeclaration¿signatureToSignatureDeclaration²symbolToEntityName²symbolToExpression¬symbolToNodeÙ!symbolToTypeParameterDeclarations¼symbolToParameterDeclarationºtypeParameterToDeclaration±getSymbolsInScope³getSymbolAtLocation·getIndexInfosAtLocationÙ!getShorthandAssignmentValueSymbolÙ#getExportSpecifierLocalTargetSymbol·getExportSymbolOfSymbol±getTypeAtLocationºgetTypeAtLocationForLinterÙ tryGetTypeAtLocationWithoutCheckºgetTypeOfAssignmentPatternÙ*getPropertySymbolOfDestructuringAssignment±signatureToString¬typeToString®symbolToStringµtypePredicateToString®writeSignature©writeType«writeSymbol²writeTypePredicate¼getAugmentedPropertiesOfType®getRootSymbols²getSymbolOfExpando±getContextualTypeÙ(getContextualTypeForObjectLiteralElementÙ#getContextualTypeForArgumentAtIndexÙ getContextualTypeForJsxAttribute²isContextSensitiveÙ!getTypeOfPropertyOfContextualTypeµgetFullyQualifiedNameÙ#tryGetResolvedSignatureWithoutCheck´getResolvedSignatureÙ/getResolvedSignatureForStringLiteralCompletionsÙ$getResolvedSignatureForSignatureHelpµgetExpandedParameters¹hasEffectiveRestParameterºcontainsArgumentsReference°getConstantValueµisValidPropertyAccessÙ#isValidPropertyAccessForCompletions»getSignatureFromDeclarationºisImplementationOfOverload¹getImmediateAliasedSymbol°getAliasedSymbol¯getEmitResolver²getExportsOfModule¿getExportsAndPropertiesOfModuleÙ forEachExportAndPropertyOfModule¯getSymbolWalker±getAmbientModules¹getJsxIntrinsicTagNamesAt³isOptionalParameter»tryGetMemberInModuleExportsÙ(tryGetMemberInModuleExportsAndProperties´tryFindAmbientModuleÙ(tryFindAmbientModuleWithoutAugmentations¯getApparentType¬getUnionType²isTypeAssignableTo³createAnonymousType¯createSignature¬createSymbol¯createIndexInfoªgetAnyType­getStringType­getNumberType±createPromiseType¯createArrayType¹getElementTypeOfArrayType®getBooleanType¬getFalseType«getTrueType«getVoidType°getUndefinedType«getNullType¯getESSymbolType¬getNeverType¯getOptionalType®getPromiseType²getPromiseLikeType´getAsyncIterableType²isSymbolAccessible«isArrayType«isTupleType¯isArrayLikeTypeÙ#isTypeInvalidDueToUnionDiscriminantºgetExactOptionalProperties¿getAllPossiblePropertiesOfTypesÙ(getSuggestedSymbolForNonexistentPropertyÙ#getSuggestionForNonexistentPropertyÙ,getSuggestedSymbolForNonexistentJSXAttributeÙ&getSuggestedSymbolForNonexistentSymbolÙ!getSuggestionForNonexistentSymbolÙ&getSuggestedSymbolForNonexistentModuleÙ!getSuggestionForNonexistentExportÙ+getSuggestedSymbolForNonexistentClassMember·getBaseConstraintOfType»getDefaultFromTypeParameter«resolveName¯getJsxNamespaceµgetJsxFragmentFactory¸getAccessibleSymbolChain»getTypePredicateOfSignature¹resolveExternalModuleName»resolveExternalModuleSymbol°tryGetThisTypeAt¹getTypeArgumentConstraint¸getSuggestionDiagnostics¸runWithCancellationTokenÙ3getLocalTypeParametersOfClassOrInterfaceOrTypeAlias´isDeclarationVisible´isPropertyAccessible»getTypeOnlyAliasDeclaration¿getMemberOverrideModifierStatusÙ!isTypeParameterPossiblyReferenced²getConstEnumRelate´clearConstEnumRelateµdeleteConstEnumRelateÙ$getTypeArgumentsForResolvedSignatureµgetCheckedSourceFilesÙ"collectHaveTsNoCheckFilesForLinter·clearQualifiedNameCache®isStaticRecord²isStaticSourceFileÔ  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ã‘ÔrD’²hostDependencyName®hostModuleNameª./GamePage¥entryÃÚnøimport router from '@ohos.router';
+import { ScreenAdapter } from '../utils/ScreenAdapter';
+import { GamePage as GP, CastUI, getSizeValue, getStringValue } from '../constants/LayoutConstants';
+import { DeviceCastManager, DeviceInfo, CastConnectionState } from '../cast/DeviceCastManager';
+import { DistributedGameData, SyncableGameState, ControlEvent } from '../cast/DistributedGameData';
+import { DeviceSelectPanel } from '../cast/DeviceSelectPanel';
+import { CastStatusBar } from '../cast/CastStatusBar';
 
 interface Target {
   id: number;
@@ -685,6 +1355,10 @@ interface Target {
 interface GameRecord {
   score: number;
   date: string;
+  hits: number;
+  misses: number;
+  maxCombo: number;
+  avgReactionMs: number;
 }
 
 interface SizeOption {
@@ -692,10 +1366,17 @@ interface SizeOption {
   label: string;
 }
 
-// å…¨å±€å˜é‡å­˜å‚¨æ¸¸æˆè®°å½•
-let gameRecords: GameRecord[] = [];
+interface FloatingDot {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  speed: number;
+}
 
-// é¶å­å¤§å°é€‰é¡¹
+let gameRecords: GameRecord[] = [];
+let countOptions: number[] = [1, 2, 3, 4, 5];
 let sizeOptions: SizeOption[] = [
   { value: 1, label: 'å°' },
   { value: 2, label: 'ä¸­' },
@@ -711,13 +1392,25 @@ struct GamePage {
   @State isGameRunning: boolean = false;
   @State isGameOver: boolean = false;
   @State isSmallScreen: boolean = false;
-  // é¶å­æ•°é‡ï¼šå±å¹•ä¸ŠåŒæ—¶ä¿æŒçš„é¶å­æ•°é‡
   @State targetCount: number = 1;
-  // é¶å­å¤§å°ï¼š1=å°, 2=ä¸­, 3=å¤§
   @State targetSize: number = 2;
-  // æ¸¸æˆæ—¶é•¿ï¼ˆç§’ï¼‰ï¼š15, 30, 60
   @State gameDuration: number = 30;
   @State isGamePreparing: boolean = true;
+
+  @State connectionState: CastConnectionState = CastConnectionState.DISCONNECTED;
+  @State targetDeviceName: string = '';
+  @State discoveredDevices: DeviceInfo[] = [];
+  @State isDiscovering: boolean = false;
+  @State isDistributedSupported: boolean = false;
+
+  @State hitCount: number = 0;
+  @State missCount: number = 0;
+  @State combo: number = 0;
+  @State maxCombo: number = 0;
+  @State lastHitTime: number = 0;
+  @State totalReactionMs: number = 0;
+  @State dots: FloatingDot[] = [];
+  @State animOffset: number = 0;
 
   private gameTimer: number = -1;
   private targetTimer: number = -1;
@@ -726,43 +1419,176 @@ struct GamePage {
   private gameAreaHeight: number = 0;
   private readonly MAX_ATTEMPTS: number = 100;
   private readonly PADDING: number = 10;
+  private gameStartTime: number = 0;
+
+  private castManager: DeviceCastManager = DeviceCastManager.getInstance();
+  private distributedData: DistributedGameData = new DistributedGameData();
+  private dotId: number = 0;
+  private bgAnimTimer: number = -1;
+
+  private deviceSelectDialogController: CustomDialogController = new CustomDialogController({
+    builder: DeviceSelectPanel({
+      devices: this.discoveredDevices,
+      connectionState: this.connectionState,
+      isDiscovering: this.isDiscovering,
+      isSmallScreen: this.isSmallScreen,
+      onDeviceSelect: (deviceId: string) => {
+        this.onDeviceSelected(deviceId);
+      },
+      onClose: () => {
+        this.castManager.stopDeviceDiscovery();
+        this.isDiscovering = false;
+      },
+      onRetry: () => {
+        this.startDeviceDiscovery();
+      }
+    }),
+    autoCancel: true
+  });
 
   aboutToAppear() {
-    this.isSmallScreen = false;
+    this.isSmallScreen = ScreenAdapter.initScreenDetection();
+    ScreenAdapter.registerListener((isSmall: boolean) => {
+      this.isSmallScreen = isSmall;
+    });
     this.isGamePreparing = true;
+    this.initCast();
+    this.initDots();
+    this.startBgAnimation();
   }
 
   aboutToDisappear() {
+    ScreenAdapter.unregisterListener();
     this.stopGame();
-  }
-
-  // è·å–å½“å‰é¶å­åŠå¾„ï¼ˆæ ¹æ®å¤§å°é€‰æ‹©ï¼‰
-  getTargetRadius(): number {
-    if (this.isSmallScreen) {
-      if (this.targetSize === 1) return 20; // å°
-      if (this.targetSize === 2) return 30; // ä¸­
-      return 40; // å¤§
-    } else {
-      if (this.targetSize === 1) return 35; // å°
-      if (this.targetSize === 2) return 55; // ä¸­
-      return 75; // å¤§
+    this.distributedData.destroy();
+    if (this.bgAnimTimer !== -1) {
+      clearInterval(this.bgAnimTimer);
     }
   }
 
-  // ä½ç½®éªŒè¯æ–¹æ³•ï¼šæ£€æŸ¥ç»™å®šä½ç½®æ˜¯å¦æœ‰æ•ˆï¼ˆä¸è¶…å‡ºè¾¹ç•Œä¸”ä¸ä¸å·²å­˜åœ¨é¶å­é‡å ï¼‰
-  isPositionValid(x: number, y: number, radius: number): boolean {
-    const areaWidth = this.gameAreaWidth || (this.isSmallScreen ? 300 : 500);
-    const areaHeight = this.gameAreaHeight || (this.isSmallScreen ? 400 : 600);
+  private initDots() {
+    for (let i = 0; i < 12; i++) {
+      this.dots.push({
+        id: this.dotId++,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: 2 + Math.random() * 4,
+        opacity: 0.05 + Math.random() * 0.2,
+        speed: 0.05 + Math.random() * 0.12
+      });
+    }
+  }
 
-    // è¾¹ç•ŒéªŒè¯
+  private startBgAnimation() {
+    this.bgAnimTimer = setInterval(() => {
+      this.animOffset += 1;
+      const updated: FloatingDot[] = [];
+      for (const d of this.dots) {
+        let newY = d.y - d.speed;
+        if (newY < -5) newY = 105;
+        updated.push({
+          id: d.id,
+          x: d.x + Math.sin(this.animOffset * 0.02 + d.id) * 0.03,
+          y: newY,
+          size: d.size,
+          opacity: d.opacity,
+          speed: d.speed
+        });
+      }
+      this.dots = updated;
+    }, 50);
+  }
+
+  private initCast(): void {
+    this.castManager.init();
+    this.isDistributedSupported = this.castManager.isDistributedSupported();
+    this.castManager.setOnConnectionStateChange((state: CastConnectionState) => {
+      this.connectionState = state;
+      if (state === CastConnectionState.CONNECTED) {
+        this.targetDeviceName = this.castManager.getConnectedDeviceName();
+        const sessionId = 'targetgame_' + Date.now();
+        this.distributedData.createDistributedObject(sessionId);
+        this.distributedData.onRemoteControl((event: ControlEvent) => {
+          this.handleRemoteControl(event);
+        });
+      } else if (state === CastConnectionState.DISCONNECTED) {
+        this.targetDeviceName = '';
+        this.distributedData.destroy();
+      }
+    });
+    this.castManager.setOnDeviceListChange((devices: DeviceInfo[]) => {
+      this.discoveredDevices = devices;
+    });
+  }
+
+  private startDeviceDiscovery(): void {
+    this.isDiscovering = true;
+    this.discoveredDevices = [];
+    this.castManager.startDeviceDiscovery();
+    setTimeout(() => {
+      this.isDiscovering = false;
+    }, 5000);
+  }
+
+  private async onDeviceSelected(deviceId: string): Promise<void> {
+    const success = await this.castManager.connectDevice(deviceId);
+    if (success) {
+      this.deviceSelectDialogController.close();
+      this.castManager.stopDeviceDiscovery();
+      this.isDiscovering = false;
+    }
+  }
+
+  private disconnectCast(): void {
+    this.castManager.disconnectDevice();
+  }
+
+  private syncGameStateToRemote(): void {
+    if (this.connectionState !== CastConnectionState.CONNECTED) {
+      return;
+    }
+    const state: SyncableGameState = {
+      score: this.score,
+      timeLeft: this.timeLeft,
+      targetsJson: JSON.stringify(this.targets),
+      isGameRunning: this.isGameRunning,
+      isGameOver: this.isGameOver,
+      isGamePreparing: this.isGamePreparing,
+      targetCount: this.targetCount,
+      targetSize: this.targetSize,
+      gameDuration: this.gameDuration
+    };
+    this.distributedData.syncGameState(state);
+  }
+
+  private handleRemoteControl(event: ControlEvent): void {
+    if (event.type === 'hit') {
+      const target = this.targets.find(t => t.id === event.targetId);
+      if (target) {
+        this.hitTarget(target);
+      }
+    }
+  }
+
+  getTargetRadius(): number {
+    if (this.targetSize === 1) {
+      return getSizeValue(GP.targetRadiusSmall, this.isSmallScreen);
+    }
+    if (this.targetSize === 2) {
+      return getSizeValue(GP.targetRadiusMedium, this.isSmallScreen);
+    }
+    return getSizeValue(GP.targetRadiusLarge, this.isSmallScreen);
+  }
+
+  isPositionValid(x: number, y: number, radius: number): boolean {
+    const areaWidth = this.gameAreaWidth || getSizeValue(GP.defaultAreaWidth, this.isSmallScreen);
+    const areaHeight = this.gameAreaHeight || getSizeValue(GP.defaultAreaHeight, this.isSmallScreen);
     if (x < radius || x > areaWidth - radius) {
       return false;
     }
     if (y < radius || y > areaHeight - radius) {
       return false;
     }
-
-    // è·ç¦»éªŒè¯ï¼šæ£€æŸ¥ä¸æ‰€æœ‰å·²å­˜åœ¨é¶å­çš„è·ç¦»
     for (const existingTarget of this.targets) {
       const distanceSquared = (x - existingTarget.x) ** 2 + (y - existingTarget.y) ** 2;
       const minDistanceSquared = (radius + existingTarget.radius + this.PADDING) ** 2;
@@ -770,13 +1596,22 @@ struct GamePage {
         return false;
       }
     }
-
     return true;
+  }
+
+  getAccuracy(): number {
+    const total = this.hitCount + this.missCount;
+    if (total === 0) return 0;
+    return Math.round((this.hitCount / total) * 100);
+  }
+
+  getAvgReactionMs(): number {
+    if (this.hitCount === 0) return 0;
+    return Math.round(this.totalReactionMs / this.hitCount);
   }
 
   startGame() {
     this.stopGame();
-
     this.score = 0;
     this.timeLeft = this.gameDuration;
     this.targets = [];
@@ -784,8 +1619,14 @@ struct GamePage {
     this.isGameOver = false;
     this.isGamePreparing = false;
     this.targetId = 0;
+    this.hitCount = 0;
+    this.missCount = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.lastHitTime = 0;
+    this.totalReactionMs = 0;
+    this.gameStartTime = Date.now();
 
-    // å»¶è¿Ÿç”Ÿæˆé¶å­ï¼Œç¡®ä¿æ¸¸æˆåŒºåŸŸå°ºå¯¸å·²é€šè¿‡onAreaChangeè·å–
     setTimeout(() => {
       this.fillTargets();
     }, 100);
@@ -795,10 +1636,10 @@ struct GamePage {
       if (this.timeLeft <= 0) {
         this.endGame();
       }
+      this.syncGameStateToRemote();
     }, 1000);
   }
 
-  // è¡¥å……é¶å­åˆ° targetCount ä¸ª
   fillTargets() {
     const needCount = this.targetCount - this.targets.length;
     for (let i = 0; i < needCount; i++) {
@@ -806,23 +1647,18 @@ struct GamePage {
     }
   }
 
-  // åˆ›å»ºå•ä¸ªé¶å­ï¼ˆå›ºå®šå¤§å°ï¼Œä¸è‡ªåŠ¨æ¶ˆå¤±ï¼‰
   createOneTarget() {
     const radius = this.getTargetRadius();
-    const areaWidth = this.gameAreaWidth || (this.isSmallScreen ? 300 : 500);
-    const areaHeight = this.gameAreaHeight || (this.isSmallScreen ? 400 : 600);
-
-    // è®¡ç®—æœ‰æ•ˆåŒºåŸŸè¾¹ç•Œ
+    const areaWidth = this.gameAreaWidth || getSizeValue(GP.defaultAreaWidth, this.isSmallScreen);
+    const areaHeight = this.gameAreaHeight || getSizeValue(GP.defaultAreaHeight, this.isSmallScreen);
     const minX = radius;
     const maxX = areaWidth - radius;
     const minY = radius;
     const maxY = areaHeight - radius;
 
-    // å°è¯•-éªŒè¯-é‡è¯•æœºåˆ¶ï¼šæœ€å¤šå°è¯• MAX_ATTEMPTS æ¬¡
     for (let i = 0; i < this.MAX_ATTEMPTS; i++) {
       const x = minX + Math.random() * (maxX - minX);
       const y = minY + Math.random() * (maxY - minY);
-
       if (this.isPositionValid(x, y, radius)) {
         const newTarget: Target = {
           id: this.targetId++,
@@ -835,22 +1671,39 @@ struct GamePage {
         return;
       }
     }
-
-    // è¶…è¿‡æœ€å¤§å°è¯•æ¬¡æ•°ï¼Œæ”¾å¼ƒç”Ÿæˆ
   }
 
   hitTarget(target: Target) {
     if (!this.isGameRunning) return;
 
-    const baseScore = this.isSmallScreen ? 30 : 50;
+    const now = Date.now();
+    if (this.lastHitTime > 0) {
+      this.totalReactionMs += (now - this.lastHitTime);
+    }
+    this.lastHitTime = now;
+
+    const baseScore = getSizeValue(GP.baseScore, this.isSmallScreen);
     const scoreMultiplier = baseScore / target.radius;
     const points = Math.floor(10 * scoreMultiplier);
 
-    this.score += points;
-    // ç§»é™¤è¢«å‡»ä¸­çš„é¶å­
+    this.combo++;
+    if (this.combo > this.maxCombo) {
+      this.maxCombo = this.combo;
+    }
+
+    const comboBonus = this.combo > 1 ? Math.floor(points * (this.combo - 1) * 0.1) : 0;
+    this.score += points + comboBonus;
+    this.hitCount++;
+
     this.targets = this.targets.filter((t: Target) => t.id !== target.id);
-    // ç«‹å³è¡¥å……é¶å­ï¼Œä¿æŒå±å¹•ä¸Šå§‹ç»ˆæœ‰ targetCount ä¸ª
     this.fillTargets();
+    this.syncGameStateToRemote();
+  }
+
+  onMissClick() {
+    if (!this.isGameRunning) return;
+    this.missCount++;
+    this.combo = 0;
   }
 
   endGame() {
@@ -859,6 +1712,7 @@ struct GamePage {
     this.targets = [];
     this.stopGame();
     this.saveScore();
+    this.syncGameStateToRemote();
   }
 
   stopGame() {
@@ -875,12 +1729,13 @@ struct GamePage {
   saveScore() {
     const newRecord: GameRecord = {
       score: this.score,
-      date: new Date().toLocaleString()
+      date: new Date().toLocaleString(),
+      hits: this.hitCount,
+      misses: this.missCount,
+      maxCombo: this.maxCombo,
+      avgReactionMs: this.getAvgReactionMs()
     };
-
     gameRecords.push(newRecord);
-
-    // æŒ‰åˆ†æ•°æ’åºï¼Œä¿ç•™å‰10æ¡è®°å½•
     gameRecords.sort((a: GameRecord, b: GameRecord) => b.score - a.score);
     if (gameRecords.length > 10) {
       gameRecords = gameRecords.slice(0, 10);
@@ -890,30 +1745,40 @@ struct GamePage {
   build() {
     Stack() {
       Column() {
-        // å‡†å¤‡é˜¶æ®µï¼šæ˜¾ç¤ºé¶å­æ•°é‡é€‰æ‹© + é¶å­å¤§å°é€‰æ‹© + å¼€å§‹æŒ‰é’®
+        CastStatusBar({
+          connectionState: this.connectionState,
+          targetDeviceName: this.targetDeviceName,
+          isSmallScreen: this.isSmallScreen,
+          onDisconnect: () => {
+            this.disconnectCast();
+          }
+        })
+        .margin({ top: 5 })
+
         if (this.isGamePreparing) {
           Column() {
             Text('æ‰“é¶è®­ç»ƒ')
-              .fontSize(this.isSmallScreen ? 28 : 40)
+              .fontSize(getSizeValue(GP.titleFontSize, this.isSmallScreen))
               .fontColor('#FFFFFF')
               .fontWeight(FontWeight.Bold)
+              .textShadow({ radius: 8, color: 'rgba(0,0,0,0.3)', offsetX: 0, offsetY: 2 })
 
-            // é¶å­æ•°é‡é€‰æ‹©åŒºåŸŸ
             Row() {
               Text('é¶å­æ•°é‡:')
-                .fontSize(this.isSmallScreen ? 16 : 20)
+                .fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen))
                 .fontColor('#FFFFFF')
                 .fontWeight(FontWeight.Bold)
 
-              ForEach([1, 2, 3, 4, 5], (count: number) => {
-                Button(count.toString())
-                  .width(this.isSmallScreen ? 36 : 48)
-                  .height(this.isSmallScreen ? 36 : 48)
-                  .fontSize(this.isSmallScreen ? 16 : 20)
+              ForEach(countOptions, (count: number) => {
+                Button(count.toString(), { type: ButtonType.Normal })
+                  .width(getSizeValue(GP.countButtonSize, this.isSmallScreen))
+                  .height(getSizeValue(GP.countButtonSize, this.isSmallScreen))
+                  .fontSize(getSizeValue(GP.countButtonFontSize, this.isSmallScreen))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
-                  .backgroundColor(this.targetCount === count ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)')
-                  .borderRadius(this.isSmallScreen ? 18 : 24)
+                  .backgroundColor(this.targetCount === count ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)')
+                  .borderRadius(getSizeValue(GP.countButtonBorderRadius, this.isSmallScreen))
+                  .padding(0)
                   .margin({ left: 8 })
                   .onClick(() => {
                     this.targetCount = count;
@@ -922,47 +1787,44 @@ struct GamePage {
             }
             .margin({ top: 30 })
 
-            // é¶å­å¤§å°é€‰æ‹©åŒºåŸŸ
             Row() {
               Text('é¶å­å¤§å°:')
-                .fontSize(this.isSmallScreen ? 16 : 20)
+                .fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen))
                 .fontColor('#FFFFFF')
                 .fontWeight(FontWeight.Bold)
 
               ForEach(sizeOptions, (item: SizeOption) => {
                 Button(item.label)
-                  .width(this.isSmallScreen ? 50 : 64)
-                  .height(this.isSmallScreen ? 36 : 48)
-                  .fontSize(this.isSmallScreen ? 16 : 20)
+                  .width(getSizeValue(GP.sizeButtonWidth, this.isSmallScreen))
+                  .height(getSizeValue(GP.sizeButtonHeight, this.isSmallScreen))
+                  .fontSize(getSizeValue(GP.sizeButtonFontSize, this.isSmallScreen))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
-                  .backgroundColor(this.targetSize === item.value ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)')
-                  .borderRadius(this.isSmallScreen ? 18 : 24)
+                  .backgroundColor(this.targetSize === item.value ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)')
+                  .borderRadius(getSizeValue(GP.sizeButtonBorderRadius, this.isSmallScreen))
                   .margin({ left: 8 })
                   .onClick(() => {
                     this.targetSize = item.value;
                   })
               }, (item: SizeOption) => item.value.toString())
-
             }
             .margin({ top: 20 })
 
-            // æ¸¸æˆæ—¶é•¿é€‰æ‹©åŒºåŸŸ
             Row() {
               Text('æ¸¸æˆæ—¶é•¿:')
-                .fontSize(this.isSmallScreen ? 16 : 20)
+                .fontSize(getSizeValue(GP.labelFontSize, this.isSmallScreen))
                 .fontColor('#FFFFFF')
                 .fontWeight(FontWeight.Bold)
 
               ForEach([15, 30, 60], (duration: number) => {
                 Button(duration + 's')
-                  .width(this.isSmallScreen ? 60 : 80)
-                  .height(this.isSmallScreen ? 36 : 48)
-                  .fontSize(this.isSmallScreen ? 14 : 18)
+                  .width(getSizeValue(GP.durationButtonWidth, this.isSmallScreen))
+                  .height(getSizeValue(GP.durationButtonHeight, this.isSmallScreen))
+                  .fontSize(getSizeValue(GP.durationButtonFontSize, this.isSmallScreen))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
-                  .backgroundColor(this.gameDuration === duration ? '#FF6B6B' : 'rgba(255, 255, 255, 0.3)')
-                  .borderRadius(this.isSmallScreen ? 18 : 24)
+                  .backgroundColor(this.gameDuration === duration ? '#FF6B6B' : 'rgba(255, 255, 255, 0.2)')
+                  .borderRadius(getSizeValue(GP.durationButtonBorderRadius, this.isSmallScreen))
                   .margin({ left: 8 })
                   .onClick(() => {
                     this.gameDuration = duration;
@@ -972,15 +1834,30 @@ struct GamePage {
             .margin({ top: 20 })
 
             Button('å¼€å§‹æ¸¸æˆ')
-              .width(this.isSmallScreen ? 200 : 280)
-              .height(this.isSmallScreen ? 50 : 70)
-              .fontSize(this.isSmallScreen ? 20 : 28)
+              .width(getSizeValue(GP.startButtonWidth, this.isSmallScreen))
+              .height(getSizeValue(GP.startButtonHeight, this.isSmallScreen))
+              .fontSize(getSizeValue(GP.startButtonFontSize, this.isSmallScreen))
               .backgroundColor('#4ECDC4')
               .borderRadius(35)
+              .shadow({ radius: 12, color: 'rgba(78,205,196,0.4)', offsetX: 0, offsetY: 4 })
               .margin({ top: 40 })
               .onClick(() => {
                 this.startGame();
               })
+
+            if (this.isDistributedSupported) {
+              Button('è·¨è®¾å¤‡æŠ•é€')
+                .width(getSizeValue(CastUI.castButtonWidth, this.isSmallScreen))
+                .height(getSizeValue(CastUI.castButtonHeight, this.isSmallScreen))
+                .fontSize(getSizeValue(CastUI.castButtonFontSize, this.isSmallScreen))
+                .backgroundColor('#667eea')
+                .borderRadius(35)
+                .margin({ top: 20 })
+                .onClick(() => {
+                  this.startDeviceDiscovery();
+                  this.deviceSelectDialogController.open();
+                })
+            }
           }
           .width('100%')
           .height('100%')
@@ -988,90 +1865,248 @@ struct GamePage {
           .alignItems(HorizontalAlign.Center)
         }
 
-        // æ¸¸æˆè¿›è¡Œä¸­ï¼šæ˜¾ç¤ºå¾—åˆ†/æ—¶é—´ + æ¸¸æˆåŒºåŸŸ
         if (!this.isGamePreparing && !this.isGameOver) {
-          Row() {
-            Text(`å¾—åˆ†: ${this.score}`)
-              .fontSize(this.isSmallScreen ? 20 : 28)
-              .fontColor('#FFFFFF')
-              .fontWeight(FontWeight.Bold)
+          Column() {
+            Row() {
+              Column() {
+                Text(`${this.score}`)
+                  .fontSize(this.isSmallScreen ? 28 : 36)
+                  .fontColor('#FFD700')
+                  .fontWeight(FontWeight.Bold)
+                Text('å¾—åˆ†')
+                  .fontSize(this.isSmallScreen ? 11 : 13)
+                  .fontColor('rgba(255,255,255,0.6)')
+              }
+              .alignItems(HorizontalAlign.Center)
 
-            Blank()
+              Blank()
 
-            Text(`æ—¶é—´: ${this.timeLeft}s`)
-              .fontSize(this.isSmallScreen ? 20 : 28)
-              .fontColor('#FFFFFF')
-              .fontWeight(FontWeight.Bold)
-          }
-          .width('90%')
-          .padding(this.isSmallScreen ? 10 : 20)
-          .backgroundColor('rgba(0, 0, 0, 0.3)')
-          .borderRadius(15)
-          .margin({ top: this.isSmallScreen ? 10 : 20 })
+              Column() {
+                Text(`${this.timeLeft}s`)
+                  .fontSize(this.isSmallScreen ? 28 : 36)
+                  .fontColor(this.timeLeft <= 5 ? '#FF6B6B' : '#FFFFFF')
+                  .fontWeight(FontWeight.Bold)
+                Text('å‰©ä½™æ—¶é—´')
+                  .fontSize(this.isSmallScreen ? 11 : 13)
+                  .fontColor('rgba(255,255,255,0.6)')
+              }
+              .alignItems(HorizontalAlign.Center)
 
-          Stack() {
-            Column()
-              .width('100%')
-              .height('100%')
-              .backgroundColor('rgba(255, 255, 255, 0.1)')
-              .borderRadius(20)
+              Blank()
 
-            ForEach(this.targets, (target: Target) => {
-              // çº¯ç™½ç»Ÿä¸€åœ†å½¢é¶å­
-              Circle()
+              Column() {
+                Text(`${this.getAccuracy()}%`)
+                  .fontSize(this.isSmallScreen ? 22 : 28)
+                  .fontColor('#4ECDC4')
+                  .fontWeight(FontWeight.Bold)
+                Text('å‘½ä¸­ç‡')
+                  .fontSize(this.isSmallScreen ? 11 : 13)
+                  .fontColor('rgba(255,255,255,0.6)')
+              }
+              .alignItems(HorizontalAlign.Center)
+
+              if (this.combo > 1) {
+                Blank()
+                Column() {
+                  Text(`x${this.combo}`)
+                    .fontSize(this.isSmallScreen ? 22 : 28)
+                    .fontColor('#FF6B6B')
+                    .fontWeight(FontWeight.Bold)
+                  Text('è¿å‡»')
+                    .fontSize(this.isSmallScreen ? 11 : 13)
+                    .fontColor('rgba(255,255,255,0.6)')
+                }
+                .alignItems(HorizontalAlign.Center)
+              }
+            }
+            .width('92%')
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor('rgba(0, 0, 0, 0.4)')
+            .borderRadius(16)
+            .margin({ top: getSizeValue(GP.scoreMarginTop, this.isSmallScreen) })
+            .alignItems(VerticalAlign.Center)
+
+            Progress({ value: this.timeLeft, total: this.gameDuration, type: ProgressType.Linear })
+              .width('92%')
+              .color(this.timeLeft <= 5 ? '#FF6B6B' : '#4ECDC4')
+              .backgroundColor('rgba(255,255,255,0.1)')
+              .borderRadius(4)
+              .margin({ top: 8 })
+              .style({ strokeWidth: this.isSmallScreen ? 6 : 8 })
+
+            Stack() {
+              Column()
+                .width('100%')
+                .height('100%')
+                .backgroundColor('rgba(255, 255, 255, 0.06)')
+                .borderRadius(20)
+                .border({ width: 1, color: 'rgba(255,255,255,0.08)' })
+
+              ForEach(this.targets, (target: Target) => {
+                Stack() {
+                  Circle()
+                    .width(target.radius * 2)
+                    .height(target.radius * 2)
+                    .fill('rgba(255, 107, 107, 0.15)')
+                  Circle()
+                    .width(target.radius * 1.4)
+                    .height(target.radius * 1.4)
+                    .fill('rgba(255, 107, 107, 0.25)')
+                  Circle()
+                    .width(target.radius * 0.8)
+                    .height(target.radius * 0.8)
+                    .fill('#FF6B6B')
+                  Circle()
+                    .width(target.radius * 0.35)
+                    .height(target.radius * 0.35)
+                    .fill('#FFFFFF')
+                }
                 .width(target.radius * 2)
                 .height(target.radius * 2)
-                .fill('#FFFFFF')
                 .position({ x: target.x - target.radius, y: target.y - target.radius })
                 .opacity(target.opacity)
                 .onClick(() => {
                   this.hitTarget(target);
                 })
-            }, (target: Target) => target.id.toString())
+              }, (target: Target) => target.id.toString())
+            }
+            .width('92%')
+            .height(getStringValue(GP.gameAreaHeight, this.isSmallScreen))
+            .margin({ top: getSizeValue(GP.gameAreaMarginTop, this.isSmallScreen) })
+            .onAreaChange((oldValue: Area, newValue: Area) => {
+              this.gameAreaWidth = newValue.width as number;
+              this.gameAreaHeight = newValue.height as number;
+            })
+            .onClick(() => {
+              this.onMissClick();
+            })
           }
-          .width('90%')
-          .height(this.isSmallScreen ? '55%' : '65%')
-          .margin({ top: this.isSmallScreen ? 10 : 20 })
-          .onAreaChange((oldValue: Area, newValue: Area) => {
-            this.gameAreaWidth = newValue.width as number;
-            this.gameAreaHeight = newValue.height as number;
-          })
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
         }
       }
       .width('100%')
       .height('100%')
       .linearGradient({
         angle: 135,
-        colors: [['#667eea', 0.0], ['#764ba2', 1.0]]
+        colors: [['#1a1a3e', 0.0], ['#2d1b69', 0.5], ['#764ba2', 1.0]]
       })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
-      // æ¸¸æˆç»“æŸé¢æ¿ â€” ä½¿ç”¨Stackå åŠ åœ¨å±å¹•ä¸­å¤®
+      ForEach(this.dots, (dot: FloatingDot) => {
+        Circle()
+          .width(dot.size)
+          .height(dot.size)
+          .fill(`rgba(255, 255, 255, ${dot.opacity})`)
+          .position({ x: `${dot.x}%`, y: `${dot.y}%` })
+      }, (dot: FloatingDot) => dot.id.toString())
+
       if (this.isGameOver) {
         Column() {
           Text('æ¸¸æˆç»“æŸ!')
-            .fontSize(this.isSmallScreen ? 28 : 36)
+            .fontSize(getSizeValue(GP.gameOverTitleFontSize, this.isSmallScreen))
             .fontColor('#FFFFFF')
             .fontWeight(FontWeight.Bold)
             .width('100%')
             .textAlign(TextAlign.Center)
 
-          Text(`æœ€ç»ˆå¾—åˆ†: ${this.score}`)
-            .fontSize(this.isSmallScreen ? 24 : 32)
+          Text(`${this.score}`)
+            .fontSize(this.isSmallScreen ? 48 : 64)
             .fontColor('#FFD700')
             .fontWeight(FontWeight.Bold)
             .width('100%')
             .textAlign(TextAlign.Center)
-            .margin({ top: 20 })
+            .margin({ top: 8 })
+
+          Text('æœ€ç»ˆå¾—åˆ†')
+            .fontSize(this.isSmallScreen ? 14 : 16)
+            .fontColor('rgba(255,255,255,0.5)')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+
+          Row() {
+            Column() {
+              Text(`${this.hitCount}`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#4ECDC4')
+                .fontWeight(FontWeight.Bold)
+              Text('å‘½ä¸­')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+
+            Column() {
+              Text(`${this.missCount}`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#FF6B6B')
+                .fontWeight(FontWeight.Bold)
+              Text('å¤±è¯¯')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+
+            Column() {
+              Text(`${this.getAccuracy()}%`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#4ECDC4')
+                .fontWeight(FontWeight.Bold)
+              Text('å‘½ä¸­ç‡')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+          }
+          .width('100%')
+          .margin({ top: 24 })
+          .padding({ top: 16, bottom: 16 })
+          .backgroundColor('rgba(255,255,255,0.05)')
+          .borderRadius(12)
+
+          Row() {
+            Column() {
+              Text(`x${this.maxCombo}`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#FFD700')
+                .fontWeight(FontWeight.Bold)
+              Text('æœ€å¤§è¿å‡»')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+
+            Column() {
+              Text(`${this.getAvgReactionMs()}ms`)
+                .fontSize(this.isSmallScreen ? 22 : 28)
+                .fontColor('#667eea')
+                .fontWeight(FontWeight.Bold)
+              Text('å¹³å‡ååº”')
+                .fontSize(this.isSmallScreen ? 11 : 13)
+                .fontColor('rgba(255,255,255,0.5)')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+          }
+          .width('100%')
+          .margin({ top: 12 })
+          .padding({ top: 16, bottom: 16 })
+          .backgroundColor('rgba(255,255,255,0.05)')
+          .borderRadius(12)
 
           Column() {
             Button('å†æ¥ä¸€å±€')
-              .width(this.isSmallScreen ? 200 : 260)
-              .height(this.isSmallScreen ? 44 : 56)
-              .fontSize(this.isSmallScreen ? 18 : 22)
+              .width(getSizeValue(GP.gameOverButtonWidth, this.isSmallScreen))
+              .height(getSizeValue(GP.gameOverButtonHeight, this.isSmallScreen))
+              .fontSize(getSizeValue(GP.gameOverButtonFontSize, this.isSmallScreen))
               .backgroundColor('#4ECDC4')
               .borderRadius(28)
+              .shadow({ radius: 8, color: 'rgba(78,205,196,0.4)', offsetX: 0, offsetY: 3 })
               .onClick(() => {
                 this.stopGame();
                 this.isGameOver = false;
@@ -1080,25 +2115,28 @@ struct GamePage {
               })
 
             Button('è¿”å›é¦–é¡µ')
-              .width(this.isSmallScreen ? 200 : 260)
-              .height(this.isSmallScreen ? 44 : 56)
-              .fontSize(this.isSmallScreen ? 18 : 22)
+              .width(getSizeValue(GP.gameOverButtonWidth, this.isSmallScreen))
+              .height(getSizeValue(GP.gameOverButtonHeight, this.isSmallScreen))
+              .fontSize(getSizeValue(GP.gameOverButtonFontSize, this.isSmallScreen))
               .backgroundColor('#FF6B6B')
               .borderRadius(28)
-              .margin({ top: 15 })
+              .shadow({ radius: 8, color: 'rgba(255,107,107,0.4)', offsetX: 0, offsetY: 3 })
+              .margin({ top: 12 })
               .onClick(() => {
                 router.back();
               })
           }
-          .margin({ top: 30 })
+          .margin({ top: 24 })
           .alignItems(HorizontalAlign.Center)
         }
-        .width(this.isSmallScreen ? '70%' : '60%')
-        .padding(this.isSmallScreen ? 30 : 40)
-        .backgroundColor('rgba(0, 0, 0, 0.85)')
-        .borderRadius(20)
+        .width(getStringValue(GP.gameOverPanelWidth, this.isSmallScreen))
+        .padding(getSizeValue(GP.gameOverPanelPadding, this.isSmallScreen))
+        .backgroundColor('rgba(15, 15, 40, 0.92)')
+        .borderRadius(24)
+        .border({ width: 1, color: 'rgba(255,255,255,0.1)' })
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
+        .shadow({ radius: 30, color: 'rgba(0,0,0,0.5)', offsetX: 0, offsetY: 10 })
       }
     }
     .width('100%')
@@ -1107,101 +2145,202 @@ struct GamePage {
   }
 }
 
-// å¯¼å‡ºè·å–è®°å½•çš„å‡½æ•°
 export function getGameRecords(): GameRecord[] {
   return gameRecords;
 }
 
-// å¯¼å‡ºæ¸…é™¤è®°å½•çš„å‡½æ•°
 export function clearGameRecords(): void {
   gameRecords = [];
 }
-ÀÔrE‘¬@ohos.routerÔrF—ªassertions¨external¢id¤meta±moduleSideEffectsªresolvedByµsyntheticNamedExportsAÃÙQ hvigor_ignore_E:_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.router.d.tsAÃªoh-resolveÂ“ÔrG–§version¤fileªsourceRoot§sources¥names¨mappings«GamePage.js ‘¬GamePage.etsÜ¡–”    ”  ”  ”  ”!  !”"  "’”   ” –”   ” ” ”  ” "” #’”   ”	 	””   ” ” ”  š” ” ” 	” ” ” ” ” ” ” š” ” ” 	” ” ” ” ” ” ” š” ” ” 	” ” ” ” ” ” ” ’” ” ’”  ”  ‘”  ’”4 !”5 !’”7 "”9 "’”6 #”8 #’”< $"”ÌA $'’”9 %”> %$’”< &"”ÌA &'’”: (”; ( ’”9 *”: *’”; , ”= ,"’”> -$”ÌB -(“” /” /” / “” 0 ” 0!” 0"’” 1” 1’” 2"” 2#’” 3#” 3$’” 4*” 4-’” 5%” 5'‘” ’” !	” !’” !	” !’” "	” "’” "	” "’” #	” #’” #	” #’” $	” $’” $	” $’” %	” %’” %	” %’” &	” &’” &	” &’” (	” (’” (	” (’” *	” *’” *	” *’” ,	” ,’” ,	” ,’” -	” -’” -	” -’” 7” 7—” 8” 8” 8	” 8” 8”" 8”# 8—” 9” 9” 9	” 9” 9”# 9”$ 9 ’” :” :’” <” <–” =” =” =	” =” =” =’” >” >’” Ì@” Ì@’” ÌA” ÌA–” ÌB” ÌB” ÌB” ÌB” ÌB”  ÌB—” ÌC” ÌC
-” ÌC” ÌC” ÌC”$ ÌC”% ÌC–” ÌC!” ÌC(” ÌC*” ÌC+” ÌC,” ÌC0—” ÌD” ÌD
-” ÌD” ÌD” ÌD”$ ÌD”% ÌD–” ÌD!” ÌD(” ÌD*” ÌD+” ÌD,” ÌD0–” ÌE” ÌE” ÌE” ÌE” ÌE” ÌE‘”	 ÌF‘” ÌF—” ÌG” ÌG
-” ÌG” ÌG” ÌG”$ ÌG”% ÌG–” ÌG!” ÌG(” ÌG*” ÌG+” ÌG,” ÌG0—” ÌH” ÌH
-” ÌH” ÌH” ÌH”$ ÌH”% ÌH–” ÌH!” ÌH(” ÌH*” ÌH+” ÌH,” ÌH0–” ÌI” ÌI” ÌI” ÌI” ÌI” ÌI‘”	 ÌJ’” ÌK” ÌK’” ÌM”) ÌM'˜” ÌN” ÌN” ÌN” ÌN” ÌN” ÌN&” ÌN(”  ÌN6Ü ” ÌO” ÌO
-” ÌO” ÌO” ÌO” ÌO”, ÌO(”0 ÌO,”1 ÌO-”5 ÌO1”6 ÌO2”ÌC ÌO?”ÌD ÌOÌ@”ÌE ÌOÌA”ÌF ÌOÌB”ÌI ÌOÌE”ÌJ ÌOÌF”ÌK ÌOÌG”ÌL ÌOÌH”ÌO ÌOÌK”ÌP ÌOÌL”ÌQ ÌOÌMÜ ” ÌP” ÌP
-” ÌP” ÌP” ÌP”  ÌP”. ÌP*”2 ÌP.”3 ÌP/”7 ÌP3”8 ÌP4”ÌE ÌPÌA”ÌF ÌPÌB”ÌG ÌPÌC”ÌH ÌPÌD”ÌK ÌPÌG”ÌL ÌPÌH”ÌM ÌPÌI”ÌN ÌPÌJ”ÌQ ÌPÌM”ÌR ÌPÌN”ÌS ÌPÌO’” ÌR” ÌRœ” ÌS” ÌS” ÌS	” ÌS” ÌS” ÌS” ÌS” ÌS”' ÌS#”* ÌS&”0 ÌS,”2 ÌS.”” ÌT” ÌT” ÌT” ÌT‘”	 ÌUœ” ÌV” ÌV” ÌV	” ÌV” ÌV” ÌV” ÌV” ÌV”( ÌV$”+ ÌV'”1 ÌV-”3 ÌV/”” ÌW” ÌW” ÌW” ÌW‘”	 ÌX’” ÌZ” ÌZ™” Ì[” Ì[	” Ì[”! Ì[”% Ì[!”) Ì[%”* Ì[&”1 Ì[-”3 Ì[/Ü ” Ì\” Ì\”! Ì\”$ Ì\”% Ì\”& Ì\ ”) Ì\#”7 Ì\1”8 Ì\2”9 Ì\3”: Ì\4”> Ì\8”? Ì\9”ÌB Ì\<”ÌC Ì\=”ÌD Ì\>”ÌG Ì\ÌA”ÌU Ì\ÌO”ÌV Ì\ÌP”ÌW Ì\ÌQ”ÌX Ì\ÌR”Ì\ Ì\ÌV”Ì] Ì\ÌW”Ì^ Ì\ÌXÜ ” Ì]” Ì]”$ Ì]”' Ì]!”( Ì]"”. Ì](”1 Ì]+”? Ì]9”Ì@ Ì]:”ÌF Ì]Ì@”ÌI Ì]ÌC”ÌM Ì]ÌG”ÌN Ì]ÌH”ÌU Ì]ÌO”ÌV Ì]ÌP”ÌZ Ì]ÌT”Ì[ Ì]ÌU”Ì\ Ì]ÌV–” Ì^” Ì^
-” Ì^”" Ì^”4 Ì^.”6 Ì^0”” Ì_” Ì_” Ì_” Ì_‘” Ì`‘”	 Ìa”” Ìc” Ìc” Ìc” Ìc’” Ìd” Ìd’” Ìf” Ìf–” Ìg” Ìg” Ìg	” Ìg” Ìg” Ìg—” Ìi” Ìi” Ìi	” Ìi” Ìi” Ìi” Ìi™” Ìj” Ìj” Ìj	” Ìj” Ìj” Ìj” Ìj”) Ìj%”* Ìj&—” Ìk” Ìk” Ìk	” Ìk” Ìk” Ìk” Ìk—” Ìl” Ìl” Ìl	” Ìl” Ìl”! Ìl”" Ìl—” Ìm” Ìm” Ìm	” Ìm” Ìm” Ìm”  Ìm—” Ìn” Ìn” Ìn	” Ìn” Ìn”$ Ìn ”% Ìn!—” Ìo” Ìo” Ìo	” Ìo” Ìo” Ìo” Ìo’” Ìq”+ Ìq'•” Ìr” Ìr” Ìr” Ìr” Ìr–” Ìs” Ìs
-” Ìs” Ìs” Ìs” Ìs–” Ìt”	 Ìt” Ìt” Ìt
-” Ìt” Ìt™” Ìv” Ìv” Ìv	” Ìv” Ìv”$ Ìv ”% Ìv!”( Ìv$”* Ìv&–” Ìw” Ìw
-” Ìw” Ìw” Ìw” Ìw˜” Ìx” Ìx
-” Ìx” Ìx” Ìx”! Ìx”" Ìx”$ Ìx–” Ìy” Ìy” Ìy” Ìy” Ìy” Ìy‘” Ìz–” Ì{”	 Ì{” Ì{” Ì{” Ì{” Ì{’” Ì|” Ì|’” Ì~” Ì~’” Ì” Ì” Ì€” Ì€
-” Ì€” Ì€” Ì€” Ì€”* Ì€&”- Ì€)”1 Ì€-”2 Ì€.”9 Ì€5”: Ì€6”Ì@ Ì€<”ÌA Ì€=” Ì” Ì	” Ì” Ì” Ì” Ì” Ì” Ì” Ì”% Ì!”' Ì#”( Ì$”* Ì&”, Ì(–” Ì‚” Ì‚
-” Ì‚”  Ì‚”" Ì‚”# Ì‚‘”	 Ìƒ’” Ì„” Ì„’” Ì†” Ì†’” Ì‡” Ì‡™” Ìˆ” Ìˆ
-” Ìˆ” Ìˆ” Ìˆ” Ìˆ”+ Ìˆ'”- Ìˆ)”. Ìˆ*Ü ” Ì‰” Ì‰
-” Ì‰” Ì‰” Ì‰” Ì‰”, Ì‰(”0 Ì‰,”1 Ì‰-”5 Ì‰1”6 Ì‰2”ÌC Ì‰?”ÌD Ì‰Ì@”ÌE Ì‰ÌA”ÌF Ì‰ÌB”ÌI Ì‰ÌE”ÌJ Ì‰ÌF”ÌK Ì‰ÌG”ÌL Ì‰ÌH”ÌO Ì‰ÌK”ÌP Ì‰ÌL”ÌQ Ì‰ÌMÜ ” ÌŠ” ÌŠ
-” ÌŠ” ÌŠ” ÌŠ”  ÌŠ”. ÌŠ*”2 ÌŠ.”3 ÌŠ/”7 ÌŠ3”8 ÌŠ4”ÌE ÌŠÌA”ÌF ÌŠÌB”ÌG ÌŠÌC”ÌH ÌŠÌD”ÌK ÌŠÌG”ÌL ÌŠÌH”ÌM ÌŠÌI”ÌN ÌŠÌJ”ÌQ ÌŠÌM”ÌR ÌŠÌN”ÌS ÌŠÌO’” ÌŒ” ÌŒ–” Ì” Ì
-” Ì” Ì” Ì” Ì˜” Ì” Ì
-” Ì” Ì” Ì”! Ì”' Ì#”( Ì$–” Ì” Ì
-” Ì” Ì” Ì” Ì˜” Ì” Ì
-” Ì” Ì” Ì”" Ì”( Ì$”) Ì%’” Ì’”) Ì’%Ü ” Ì“” Ì“	” Ì“” Ì“” Ì“” Ì“” Ì“” Ì“” Ì“”  Ì“”! Ì“”- Ì“)”/ Ì“+”0 Ì“,”2 Ì“.”4 Ì“0Ü ” Ì”” Ì”” Ì”” Ì”” Ì”” Ì””! Ì””" Ì””( Ì”"”* Ì”$”- Ì”'”. Ì”(”2 Ì”,”5 Ì”/”9 Ì”3”: Ì”4”; Ì”5Ü ” Ì•” Ì•” Ì•” Ì•” Ì•” Ì•”! Ì•”" Ì•”( Ì•"”* Ì•$”- Ì•'”. Ì•(”2 Ì•,”5 Ì•/”9 Ì•3”: Ì•4”; Ì•5” Ì—” Ì—
-” Ì—” Ì—”$ Ì—”% Ì—”& Ì— ”( Ì—"”) Ì—#”+ Ì—%”1 Ì—+”2 Ì—,”4 Ì—.”” Ì˜” Ì˜” Ì˜”" Ì˜"—” Ì™
-” Ì™” Ì™” Ì™” Ì™”% Ì™”' Ì™”” Ìš
-” Ìš” Ìš” Ìš”” Ì›
-” Ì›” Ì›” Ì›”” Ìœ
-” Ìœ” Ìœ”" Ìœ”” Ì
-” Ì” Ì”  Ì’” Ì	” Ì
-š” ÌŸ” ÌŸ” ÌŸ” ÌŸ” ÌŸ”! ÌŸ”" ÌŸ”+ ÌŸ#”, ÌŸ$”- ÌŸ%’” Ì ” Ì ‘” Ì¡‘”	 Ì¢’” Ì¤” Ì¤’” Ì¥” Ì¥”” Ì§” Ì§” Ì§” Ì§–” Ì¨” Ì¨” Ì¨	” Ì¨” Ì¨” Ì¨’” Ì¨” Ì¨$Ü ” Ìª” Ìª
-” Ìª” Ìª” Ìª” Ìª”, Ìª(”- Ìª)”. Ìª*”/ Ìª+”1 Ìª-”2 Ìª.”3 Ìª/”4 Ìª0”6 Ìª2”7 Ìª3š” Ì«” Ì«
-” Ì«”  Ì«”) Ì«%”, Ì«(”2 Ì«.”3 Ì«/”9 Ì«5”: Ì«6” Ì¬” Ì¬
-” Ì¬” Ì¬” Ì¬” Ì¬”! Ì¬”" Ì¬”$ Ì¬ ”' Ì¬#”6 Ì¬2”7 Ì¬3”8 Ì¬4—” Ì®” Ì®” Ì®	” Ì®” Ì®” Ì®” Ì®’” Ì¯” Ì¯Ü ” Ì°” Ì°” Ì°	” Ì°” Ì°” Ì°” Ì°”# Ì°”$ Ì° ”* Ì°&”+ Ì°'”, Ì°(”- Ì°1”/ Ì°3”1 Ì°5”2 Ì°6”3 Ì°7”4 Ì°8”6 Ì°:”; Ì°?”ÌA Ì°ÌE”ÌB Ì°ÌF”ÌD Ì°ÌH”ÌE Ì°ÌI”ÌF Ì°ÌJ’” Ì±”( Ì±$–” Ì²” Ì²” Ì²	” Ì²” Ì²” Ì²’” Ì³” Ì³’” Ìµ” Ìµ	—” Ì¶” Ì¶” Ì¶	” Ì¶” Ì¶”" Ì¶”# Ì¶—” Ì·” Ì·” Ì·	” Ì·” Ì·” Ì·” Ì·—” Ì¸” Ì¸” Ì¸	” Ì¸” Ì¸” Ì¸” Ì¸–” Ì¹” Ì¹” Ì¹	” Ì¹” Ì¹” Ì¹–” Ìº” Ìº” Ìº	” Ìº” Ìº” Ìº’” Ì»” Ì»’” Ì½” Ì½
-™” Ì¾” Ì¾” Ì¾” Ì¾” Ì¾” Ì¾”  Ì¾”! Ì¾”# Ì¾˜” Ì¿” Ì¿” Ì¿” Ì¿” Ì¿”( Ì¿"”) Ì¿#”* Ì¿$˜” ÌÀ” ÌÀ
-” ÌÀ” ÌÀ” ÌÀ” ÌÀ” ÌÀ”  ÌÀ‘”	 ÌÁ™” ÌÂ” ÌÂ” ÌÂ” ÌÂ” ÌÂ”! ÌÂ”" ÌÂ”# ÌÂ”% ÌÂ!˜” ÌÃ” ÌÃ” ÌÃ” ÌÃ” ÌÃ”* ÌÃ$”+ ÌÃ%”, ÌÃ&˜” ÌÄ” ÌÄ
-” ÌÄ” ÌÄ” ÌÄ”  ÌÄ”! ÌÄ”" ÌÄ‘”	 ÌÅ’” ÌÆ” ÌÆ’” ÌÈ” ÌÈ”” ÌÉ” ÌÉ
-” ÌÉ” ÌÉ"–” ÌÊ” ÌÊ” ÌÊ” ÌÊ” ÌÊ” ÌÊ™” ÌË” ÌË
-” ÌË” ÌË” ÌË” ÌË” ÌË”+ ÌË%”- ÌË'’”	 ÌÌ”
- ÌÌ˜” ÌÎ” ÌÎ” ÌÎ” ÌÎ” ÌÎ”" ÌÎ”# ÌÎ”$ ÌÎ ’” ÌĞ” ÌĞÜ ” ÌÑ” ÌÑ” ÌÑ” ÌÑ” ÌÑ” ÌÑ” ÌÑ#” ÌÑ%” ÌÑ2”  ÌÑ4”" ÌÑ6”# ÌÑ7”$ ÌÑ8”% ÌÑ9”* ÌÑ>”- ÌÑÌA”. ÌÑÌB”/ ÌÑÌC”4 ÌÑÌH”5 ÌÑÌI”6 ÌÑÌJ˜” ÌÒ” ÌÒ” ÌÒ” ÌÒ” ÌÒ”! ÌÒ”# ÌÒ”% ÌÒ!œ” ÌÓ” ÌÓ” ÌÓ”% ÌÓ”& ÌÓ ”+ ÌÓ%”, ÌÓ&”- ÌÓ'”/ ÌÓ)”1 ÌÓ+”2 ÌÓ,”3 ÌÓ-‘”	 ÌÔ’” ÌÕ” ÌÕ‘” Ì×’” ÌØ” ÌØ	–” ÌØ” ÌØ	” Í­” Í­
-” Í­” Í­–” ÌØ” ÌØ	” Í®” Í®” Í®” Í®˜” ÌØ” ÌØ	” Í¯” Í¯” Í¯”( Í¯”) Í¯”/ Í¯"’” ÌÙ” ÌÙ–” ÌÙ” ÌÙ” Ín” Ín” Ín” Ín–” ÌÙ” ÌÙ” Ío” Ío” Ío”  Ío•” ÌÙ” ÌÙ” Íp”! Íp”" Íp”” Íq” Íq” Íq” ÍqÜ ” Ír” Ír” Ír” Ír” Ír”# Ír”% Ír”( Ír ”) Ír!”+ Ír#”, Ír$”5 Ír-”7 Ír/”: Ír2”; Ír3”< Ír4‘” Ís˜” ÌÙ” ÌÙ” Ít”! Ít”" Ít”+ Ít”, Ít ”2 Ít&˜” ÌÙ” ÌÙ” Íu” Íu” Íu”- Íu!”. Íu"”4 Íu(’” ÌÚ”, ÌÚ(–” ÌÛ” ÌÛ” ÌÛ” ÌÛ”$ ÌÛ ”& ÌÛ"’” ÌÜ
-” ÌÜ–” ÌÜ
-” ÌÜ” Í6”$ Í6”% Í6”+ Í6–” ÌÜ
-” ÌÜ” Í7”% Í7”& Í7”, Í7˜” ÌÜ
-” ÌÜ” Í8”- Í8”. Í8”7 Í8#”8 Í8$”> Í8*˜” ÌÜ
-” ÌÜ” Í9”) Í9”* Í9”9 Í9%”: Í9&”Ì@ Í9,”” Ìİ” Ìİ”$ Ìİ”* ÌİÜ ” Ìİ” Ìİ” ÌŞ”% ÌŞ”& ÌŞ”* ÌŞ”+ ÌŞ”8 ÌŞ*”9 ÌŞ+”: ÌŞ,”; ÌŞ-”= ÌŞ/”> ÌŞ0”? ÌŞ1”Ì@ ÌŞ2”ÌB ÌŞ4–” Ìİ” Ìİ” Ìß”& Ìß”' Ìß”0 Ìß"˜” Ìİ” Ìİ” Ìà”' Ìà”( Ìà”2 Ìà$”3 Ìà%”7 Ìà)’” Ìİ” Ìİ’” Ìâ”# Ìâ’” Ìã” Ìã’” Ìâ”# Ìâš” Ìã” Ìã” Ìø”" Ìø”# Ìø”% Ìø”( Ìø”* Ìø”, Ìø”. Ìø”” Ìä” Ìä”$ Ìä”+ ÌäÜ ” Ìä” Ìä” Ìå”% Ìå”& Ìå”* Ìå”+ Ìå”8 Ìå,”9 Ìå-”: Ìå.”; Ìå/”= Ìå1”> Ìå2”? Ìå3”Ì@ Ìå4”ÌB Ìå6–” Ìä” Ìä” Ìæ”& Ìæ”' Ìæ”0 Ìæ$˜” Ìä” Ìä” Ìç”' Ìç”( Ìç”2 Ìç&”3 Ìç'”7 Ìç+’” Ìä” Ìä’” Ìé” Ìé—”  Ìê”& Ìê”7 Ìê”< Ìê”= Ìê”ÌE Ìê%”ÌG Ìê'Ü ”  Ìê”& Ìê”' Ìë”, Ìë”- Ìë”1 Ìë”2 Ìë”? Ìë+”Ì@ Ìë,”ÌA Ìë-”ÌB Ìë.”ÌD Ìë0”ÌE Ìë1”ÌF Ìë2”ÌG Ìë3”ÌI Ìë5Ü ”  Ìê”& Ìê”' Ìì”- Ìì”. Ìì”2 Ìì”3 Ìì”Ì@ Ìì,”ÌA Ìì-”ÌB Ìì.”ÌC Ìì/”ÌE Ìì1”ÌF Ìì2”ÌG Ìì3”ÌH Ìì4”ÌJ Ìì6Ü ”  Ìê”& Ìê”' Ìí”/ Ìí”0 Ìí”4 Ìí ”5 Ìí!”ÌB Ìí.”ÌC Ìí/”ÌD Ìí0”ÌE Ìí1”ÌG Ìí3”ÌH Ìí4”ÌI Ìí5”ÌJ Ìí6”ÌL Ìí8–”  Ìê”& Ìê”' Ìî”0 Ìî”1 Ìî”: Ìî&˜”  Ìê”& Ìê”' Ìï”1 Ìï”2 Ìï”< Ìï(”= Ìï)”ÌA Ìï-Ü ”  Ìê”& Ìê”' Ìğ”6 Ìğ"”7 Ìğ#”; Ìğ'”< Ìğ(”ÌG Ìğ3”ÌL Ìğ8”ÌQ Ìğ=”ÌR Ìğ>”ÌS Ìğ?”ÌT ÌğÌ@”Ì] ÌğÌI”Ì^ ÌğÌJ”Ì_ ÌğÌK”Ì` ÌğÌL”Ìz ÌğÌfÜ ”  Ìê”& Ìê”' Ìñ”3 Ìñ”4 Ìñ ”8 Ìñ$”9 Ìñ%”ÌF Ìñ2”ÌG Ìñ3”ÌH Ìñ4”ÌI Ìñ5”ÌK Ìñ7”ÌL Ìñ8”ÌM Ìñ9”ÌN Ìñ:”ÌP Ìñ<š”  Ìê”& Ìê”' Ìò”- Ìò”. Ìò”0 Ìò”4 Ìò ”6 Ìò"”7 Ìò#”9 Ìò%—”  Ìê”& Ìê”' Ìó”. Ìó”/ Ìó”2 Ìó”4 Ìó —”$ Ìô”( Ìô”) Ìô”4 Ìô$”7 Ìô'”< Ìô,”= Ìô-’”  Ìõ”! Ìõ’” Ìê”" ÌêÜ ”; Ìé”< Ìé”= Ìé”? Ìé”Ì@ Ìé”ÌB Ìé”ÌC Ìé”ÌE Ìé ”ÌF Ìé!”ÌH Ìé#”ÌI Ìé$”ÌJ Ìé%”Ìd Ìö”Ìe Ìö”Ìj Ìö”Ìl Ìö!”Ìn Ìö#”Ìo Ìö$”Ìt Ìö)”Ìu Ìö*”Ì} Ìö2”Ì Ìö4’” Ìé” Ìé’” Ìâ” Ìâ’” Ìã” Ìã’” Ìú”# Ìú’” Ìû” Ìû’” Ìú”# Ìúš” Ìû” Ìû” Í”" Í”# Í”% Í”( Í”* Í”, Í”. Í”” Ìü” Ìü”$ Ìü”+ ÌüÜ ” Ìü” Ìü” Ìı”% Ìı”& Ìı”* Ìı”+ Ìı”8 Ìı,”9 Ìı-”: Ìı.”; Ìı/”= Ìı1”> Ìı2”? Ìı3”Ì@ Ìı4”ÌB Ìı6–” Ìü” Ìü” Ìş”& Ìş”' Ìş”0 Ìş$˜” Ìü” Ìü” Ìÿ”' Ìÿ”( Ìÿ”2 Ìÿ&”3 Ìÿ'”7 Ìÿ+’” Ìü” Ìü’” Í” Í–”  Í”& Í”7 Í”; Í”< Í”ÌA Í!Ü ”  Í”& Í”' Í”, Í”- Í”1 Í”2 Í”? Í+”Ì@ Í,”ÌA Í-”ÌB Í.”ÌD Í0”ÌE Í1”ÌF Í2”ÌG Í3”ÌI Í5Ü ”  Í”& Í”' Í”- Í”. Í”2 Í”3 Í”Ì@ Í,”ÌA Í-”ÌB Í.”ÌC Í/”ÌE Í1”ÌF Í2”ÌG Í3”ÌH Í4”ÌJ Í6Ü ”  Í”& Í”' Í”/ Í”0 Í”4 Í ”5 Í!”ÌB Í.”ÌC Í/”ÌD Í0”ÌE Í1”ÌG Í3”ÌH Í4”ÌI Í5”ÌJ Í6”ÌL Í8–”  Í”& Í”' Í”0 Í”1 Í”: Í&˜”  Í”& Í”' Í”1 Í”2 Í”< Í(”= Í)”ÌA Í-Ü ”  Í”& Í”' Í”6 Í"”7 Í#”; Í'”< Í(”ÌF Í2”ÌK Í7”ÌO Í;”ÌP Í<”ÌU ÍÌA”ÌV ÍÌB”ÌW ÍÌC”ÌX ÍÌD”Ìa ÍÌM”Ìb ÍÌN”Ìc ÍÌO”Ìd ÍÌP”Ì~ ÍÌjÜ ”  Í”& Í”' Í	”3 Í	”4 Í	 ”8 Í	$”9 Í	%”ÌF Í	2”ÌG Í	3”ÌH Í	4”ÌI Í	5”ÌK Í	7”ÌL Í	8”ÌM Í	9”ÌN Í	:”ÌP Í	<š”  Í”& Í”' Í
-”- Í
-”. Í
-”0 Í
-”4 Í
- ”6 Í
-"”7 Í
-#”9 Í
-%—”  Í”& Í”' Í”. Í”/ Í”2 Í”4 Í ™”$ Í”( Í”) Í”3 Í#”6 Í&”: Í*”; Í+”Ì@ Í0”ÌA Í1’”  Í”! Í’” Í”" Í”; Í”ÌF Í!”Ì` Í”Ìa Í”Ìe Í"”Ìg Í$”Ìi Í&”Ìj Í'”Ìn Í+”Ìo Í,”Ìt Í1”Ìu Í2”Ì} Í:”Ì Í<’” Í” Í’” Ìú” Ìú’” Ìû” Ìû’” Í”# Í’” Í” Í’” Í”# Íš” Í” Í” Í)”" Í)”# Í)”% Í)”( Í)”* Í)”, Í)”. Í)”” Í” Í”$ Í”+ ÍÜ ” Í” Í” Í”% Í”& Í”* Í”+ Í”8 Í,”9 Í-”: Í.”; Í/”= Í1”> Í2”? Í3”Ì@ Í4”ÌB Í6–” Í” Í” Í”& Í”' Í”0 Í$˜” Í” Í” Í”' Í”( Í”2 Í&”3 Í'”7 Í+’” Í” Í’” Í” Í–”  Í”& Í”7 Í”? Í”ÌB Í"”ÌE Í%Ü ”  Í”& Í”' Í”, Í”- Í”1 Í”2 Í”? Í+”Ì@ Í,”ÌA Í-”ÌB Í.”ÌD Í0”ÌE Í1”ÌF Í2”ÌG Í3”ÌI Í5Ü ”  Í”& Í”' Í”- Í”. Í”2 Í”3 Í”Ì@ Í,”ÌA Í-”ÌB Í.”ÌC Í/”ÌE Í1”ÌF Í2”ÌG Í3”ÌH Í4”ÌJ Í6Ü ”  Í”& Í”' Í”/ Í”0 Í”4 Í ”5 Í!”ÌB Í.”ÌC Í/”ÌD Í0”ÌE Í1”ÌG Í3”ÌH Í4”ÌI Í5”ÌJ Í6”ÌL Í8–”  Í”& Í”' Í”0 Í”1 Í”: Í&˜”  Í”& Í”' Í ”1 Í ”2 Í ”< Í (”= Í )”ÌA Í -Ü ”  Í”& Í”' Í!”6 Í!"”7 Í!#”; Í!'”< Í!(”ÌH Í!4”ÌM Í!9”ÌU Í!ÌA”ÌV Í!ÌB”ÌW Í!ÌC”ÌX Í!ÌD”Ìa Í!ÌM”Ìb Í!ÌN”Ìc Í!ÌO”Ìd Í!ÌP”Ì~ Í!ÌjÜ ”  Í”& Í”' Í"”3 Í"”4 Í" ”8 Í"$”9 Í"%”ÌF Í"2”ÌG Í"3”ÌH Í"4”ÌI Í"5”ÌK Í"7”ÌL Í"8”ÌM Í"9”ÌN Í":”ÌP Í"<š”  Í”& Í”' Í#”- Í#”. Í#”0 Í#”4 Í# ”6 Í#"”7 Í##”9 Í#%—”  Í”& Í”' Í$”. Í$”/ Í$”2 Í$”4 Í$ —”$ Í%”( Í%”) Í%”5 Í%%”8 Í%(”Ì@ Í%0”ÌA Í%1’”  Í&”! Í&’” Í”" ÍÜ ”; Í”< Í”> Í”Ì@ Í”ÌB Í”ÌD Í”ÌF Í!”ÌG Í"”Ìa Í'”Ìb Í'”Ìj Í'"”Ìl Í'$”Ìn Í'&”Ìo Í''”Ìw Í'/”Ìx Í'0”Ì€ Í'8”Ì‚ Í':’” Í” Í’” Í” Í’” Í” Í”” Í+” Í+”/ Í+”5 Í+Ü ” Í+” Í+” Í,”$ Í,”% Í,”) Í,”* Í,”7 Í,'”8 Í,(”9 Í,)”: Í,*”= Í,-”> Í,.”? Í,/”Ì@ Í,0”ÌC Í,3Ü ” Í+” Í+” Í-”% Í-”& Í-”* Í-”+ Í-”8 Í-(”9 Í-)”: Í-*”; Í-+”= Í--”> Í-.”? Í-/”Ì@ Í-0”ÌB Í-2Ü ” Í+” Í+” Í.”' Í.”( Í.”, Í.”- Í.”: Í.*”; Í.+”< Í.,”= Í.-”? Í./”Ì@ Í.0”ÌA Í.1”ÌB Í.2”ÌD Í.4–” Í+” Í+” Í/”. Í/”/ Í/”8 Í/(–” Í+” Í+” Í0”+ Í0”, Í0”. Í0š” Í+” Í+” Í1”% Í1”& Í1”( Í1”+ Í1”- Í1”/ Í1”1 Í1!—” Í+” Í+” Í2”& Í2”' Í2”* Í2”, Í2–” Í3”  Í3”! Í3”* Í3”, Í3 ”- Í3!’” Í4” Í4’” Í+” Í+’” ÌÜ
-” ÌÜ‘” Í:	’” Í<”# Í<‘” Í:	’” Í<”# Í<œ” Í=” Í=” Í=” Í=” Í=”% Í=!”) Í=%”* Í=&”. Í=*”/ Í=+”9 Í=5”; Í=7’” Í>
-” Í>–” Í>
-” Í>” ÍK”! ÍK”" ÍK”' ÍKÜ ” Í>
-” Í>” ÍL”# ÍL”$ ÍL”( ÍL”) ÍL”6 ÍL%”7 ÍL&”8 ÍL'”9 ÍL(”; ÍL*”< ÍL+”= ÍL,”> ÍL-”Ì@ ÍL/–” Í>
-” Í>” ÍM”+ ÍM”, ÍM”Ì@ ÍM/–” Í>
-” Í>” ÍN”( ÍN”) ÍN”+ ÍNÜ ” Í>
-” Í>” ÍO”" ÍO”# ÍO”% ÍO”( ÍO”* ÍO”. ÍO”/ ÍO”< ÍO+”= ÍO,”> ÍO-”? ÍO.”ÌA ÍO0”ÌB ÍO1”ÌC ÍO2”ÌD ÍO3”ÌF ÍO5”ÌH ÍO7˜” Í?” Í?”$ Í?”+ Í?”/ Í?”0 Í?”5 Í?"”7 Í?$Ü ” Í?” Í?” Í@”% Í@”& Í@”* Í@”+ Í@”8 Í@*”9 Í@+”: Í@,”; Í@-”= Í@/”> Í@0”? Í@1”Ì@ Í@2”ÌB Í@4–” Í?” Í?” ÍA”& ÍA”' ÍA”0 ÍA"˜” Í?” Í?” ÍB”' ÍB”( ÍB”2 ÍB$”3 ÍB%”7 ÍB)’” Í?” Í?’” ÍD” ÍD’” ÍD” ÍD˜” ÍF” ÍF”$ ÍF”+ ÍF”/ ÍF”0 ÍF”8 ÍF%”; ÍF(Ü ” ÍF” ÍF” ÍG”% ÍG”& ÍG”* ÍG”+ ÍG”8 ÍG*”9 ÍG+”: ÍG,”; ÍG-”= ÍG/”> ÍG0”? ÍG1”Ì@ ÍG2”ÌB ÍG4–” ÍF” ÍF” ÍH”& ÍH”' ÍH”0 ÍH"˜” ÍF” ÍF” ÍI”' ÍI”( ÍI”2 ÍI$”3 ÍI%”7 ÍI)’” ÍF” ÍF’” Í>
-” Í>’” ÍQ
-” ÍQ–” ÍQ
-” ÍQ” Íe”# Íe”$ Íe”) ÍeÜ ” ÍQ
-” ÍQ” Íf”$ Íf”% Íf”) Íf”* Íf”7 Íf$”8 Íf%”9 Íf&”: Íf'”? Íf,”Ì@ Íf-”ÌA Íf.”ÌB Íf/”ÌG Íf4Ü ” ÍQ
-” ÍQ” Íg”$ Íg”% Íg”' Íg”* Íg”, Íg”0 Íg”1 Íg”> Íg+”? Íg,”Ì@ Íg-”ÌA Íg.”ÌC Íg0”ÌD Íg1”ÌE Íg2”ÌF Íg3”ÌH Íg5”ÌJ Íg7›” ÍQ
-” ÍQ” Íh”* Íh”+ Íh”, Íh”4 Íh'”6 Íh)”> Íh7”Ì@ Íh9”ÌB Íh;™” Íi”  Íi”! Íi”. Íi”1 Íi!”9 Íi)”: Íi*”? Íi9”Ì@ Íi:™” Íj”  Íj”! Íj”/ Íj”2 Íj"”: Íj*”; Íj+”ÌA Íj;”ÌB Íj<’” Ík
-” Ík’” ÍR” ÍR–” ÍR” ÍR” ÍS”$ ÍS”% ÍS”+ ÍS–” ÍR” ÍR” ÍT”% ÍT”& ÍT”, ÍT–” ÍR” ÍR” ÍU”. ÍU”/ ÍU”ÌI ÍU9–” ÍR” ÍR” ÍV”+ ÍV”, ÍV”. ÍV’” ÍR” ÍR’” ÍX” ÍX’”  ÍY”+ ÍY’”  ÍZ”& ÍZ’”  ÍY”+ ÍYš”  ÍZ”& ÍZ”' Í[”, Í[”- Í[”3 Í[”4 Í[”: Í[$”= Í['”> Í[(’”  ÍY”+ ÍYš”  ÍZ”& ÍZ”' Í\”- Í\”. Í\”4 Í\”5 Í\”; Í\%”> Í\(”? Í\)’”  ÍY”+ ÍY–”  ÍZ”& ÍZ”' Í]”+ Í]”, Í]”5 Í]’”  ÍY”+ ÍYÜ ”  ÍZ”& ÍZ”' Í^”/ Í^”0 Í^”2 Í^”3 Í^”5 Í^”; Í^%”< Í^&”= Í^'”Ì@ Í^*”ÌF Í^0”ÌG Í^1”ÌM Í^7”ÌO Í^9”ÌP Í^:”ÌR Í^<”ÌX Í^ÌB”ÌY Í^ÌC”ÌZ Í^ÌD”Ì] Í^ÌG”Ìc Í^ÌM”Ìd Í^ÌN”Ìj Í^ÌT”Ìl Í^ÌV’”  ÍY”+ ÍY˜”  ÍZ”& ÍZ”' Í_”. Í_”/ Í_”5 Í_”6 Í_ ”= Í_'’”  ÍY”+ ÍY—”  ÍZ”& ÍZ”' Í`”. Í`”/ Í`”2 Í`”4 Í`˜”$ Ía”( Ía”) Ía”2 Ía ”3 Ía!”9 Ía'”: Ía(”; Ía)’”  Íb”! ÍbÜ ”; ÍX”? ÍX”Ì@ ÍX”ÌG ÍX ”Ìa Íc”Ìb Íc”Ìh Íc”Ìj Íc ”Ìl Íc"”Ìm Íc#”Ìs Íc)”Ìt Íc*”Ìv Íc,”Ìw Íc-”Ì Íc5”Ì Íc7’” ÍX” ÍX’” ÍQ
-” ÍQ‘” Íl	‘” Íl	’” ÌÙ” ÌÙ’” Íw”& Íw –” Íx” Íx
-” Íx” Íx” Íx”! Íx’” Íy” ÍyÜ ” Íy” Íy” Í¥	”$ Í¥”% Í¥”) Í¥”* Í¥”7 Í¥!”8 Í¥"”9 Í¥#”: Í¥$”? Í¥)”Ì@ Í¥*”ÌA Í¥+”ÌB Í¥,”ÌG Í¥1Ü ” Íy” Íy” Í¦	”& Í¦”' Í¦”+ Í¦”, Í¦”9 Í¦#”: Í¦$”; Í¦%”< Í¦&”> Í¦(”? Í¦)”Ì@ Í¦*”ÌA Í¦+”ÌC Í¦-–” Íy” Íy” Í§	”. Í§”/ Í§”ÌD Í§.–” Íy” Íy” Í¨	”+ Í¨”, Í¨”. Í¨˜” Íy” Íy” Í©	”) Í©”* Í©”9 Í©#”: Í©$”Ì@ Í©*˜” Íy” Íy” Íª	”- Íª”. Íª”7 Íª!”8 Íª"”> Íª(”” Íz
-” Íz”$ Íz”+ ÍzÜ ” Íz
-” Íz” Í{”% Í{”& Í{”* Í{”+ Í{”8 Í{(”9 Í{)”: Í{*”; Í{+”= Í{-”> Í{.”? Í{/”Ì@ Í{0”ÌB Í{2–” Íz
-” Íz” Í|”& Í|”' Í|”0 Í| ˜” Íz
-” Íz” Í}”' Í}”( Í}”2 Í}"”3 Í}#”7 Í}'–” Íz
-” Íz” Í~”" Í~”# Í~”) Í~˜” Íz
-” Íz” Í”& Í”' Í”0 Í ”1 Í!”7 Í'’” Íz
-” Íz˜” Í
-” Í”$ Í”- Í”1 Í”2 Í”7 Í"”9 Í$Ü ” Í
-” Í” Í‚”% Í‚”& Í‚”* Í‚”+ Í‚”8 Í‚(”9 Í‚)”: Í‚*”; Í‚+”= Í‚-”> Í‚.”? Í‚/”Ì@ Í‚0”ÌB Í‚2–” Í
-” Í” Íƒ”& Íƒ”' Íƒ”0 Íƒ ˜” Í
-” Í” Í„”' Í„”( Í„”2 Í„"”3 Í„#”7 Í„'–” Í
-” Í” Í…”" Í…”# Í…”) Í…˜” Í
-” Í” Í†”& Í†”' Í†”0 Í† ”1 Í†!”7 Í†'š” Í
-” Í” Í‡”# Í‡”$ Í‡”& Í‡”) Í‡”+ Í‡”- Í‡”/ Í‡’” Í
-” Í’” Í‰
-” Í‰š” Í‰
-” Í‰” Í¢”% Í¢”& Í¢”( Í¢”+ Í¢”- Í¢”/ Í¢”1 Í¢˜” Í‰
-” Í‰” Í£”) Í£”* Í£”9 Í£%”: Í£&”Ì@ Í£,”” ÍŠ” ÍŠ”/ ÍŠ”5 ÍŠÜ ” ÍŠ” ÍŠ” Í‹”$ Í‹”% Í‹”) Í‹”* Í‹”7 Í‹'”8 Í‹(”9 Í‹)”: Í‹*”= Í‹-”> Í‹.”? Í‹/”Ì@ Í‹0”ÌC Í‹3Ü ” ÍŠ” ÍŠ” ÍŒ”% ÍŒ”& ÍŒ”* ÍŒ”+ ÍŒ”8 ÍŒ(”9 ÍŒ)”: ÍŒ*”; ÍŒ+”= ÍŒ-”> ÍŒ.”? ÍŒ/”Ì@ ÍŒ0”ÌB ÍŒ2Ü ” ÍŠ” ÍŠ” Í”' Í”( Í”, Í”- Í”: Í*”; Í+”< Í,”= Í-”? Í/”Ì@ Í0”ÌA Í1”ÌB Í2”ÌD Í4–” ÍŠ” ÍŠ” Í”. Í”/ Í”8 Í(–” ÍŠ” ÍŠ” Í”+ Í”, Í”. Í—” ÍŠ” ÍŠ” Í”& Í”' Í”* Í”, Í–” Í‘”  Í‘”! Í‘”) Í‘”+ Í‘”, Í‘ —” Í’”  Í’”! Í’”+ Í’”. Í’"”3 Í’'”4 Í’(—” Í“”  Í“”! Í“”. Í“"”1 Í“%”6 Í“*”7 Í“+—” Í””  Í””! Í””0 Í”$”3 Í”'”7 Í”+”8 Í”,’” Í•” Í•’” ÍŠ” ÍŠ”” Í—” Í—”/ Í—”5 Í—Ü ” Í—” Í—” Í˜”$ Í˜”% Í˜”) Í˜”* Í˜”7 Í˜'”8 Í˜(”9 Í˜)”: Í˜*”= Í˜-”> Í˜.”? Í˜/”Ì@ Í˜0”ÌC Í˜3Ü ” Í—” Í—” Í™”% Í™”& Í™”* Í™”+ Í™”8 Í™(”9 Í™)”: Í™*”; Í™+”= Í™-”> Í™.”? Í™/”Ì@ Í™0”ÌB Í™2Ü ” Í—” Í—” Íš”' Íš”( Íš”, Íš”- Íš”: Íš*”; Íš+”< Íš,”= Íš-”? Íš/”Ì@ Íš0”ÌA Íš1”ÌB Íš2”ÌD Íš4–” Í—” Í—” Í›”. Í›”/ Í›”8 Í›(–” Í—” Í—” Íœ”+ Íœ”, Íœ”. Íœš” Í—” Í—” Í”% Í”& Í”( Í”+ Í”- Í”/ Í”1 Í!—” Í—” Í—” Í”& Í”' Í”* Í”, Í–” ÍŸ”" ÍŸ”# ÍŸ”' ÍŸ”) ÍŸ”* ÍŸ’” Í ” Í ’” Í—” Í—’” Í‰
-” Í‰’” Íy” Íy‘” Í«‘” Í«’” ÌØ” ÌØ	‘” Í°’”  Í³ ” Í³””  Í´ ” Í´” Í´” Í´”” Íµ” Íµ	” Íµ” Íµ’”  Í¶ ” Í¶’”  Í¸ ” Í¸””  Í¹ ” Í¹” Í¹”  Í¹ •” Íº” Íº” Íº” Íº” Íº’”  Í» ” Í»ÔrH–§version¤file§sources®sourcesContent¥names¨mappingsÀ‘À‘ÀÜ£‘”    ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”  	 ‘”  
+ÀÔrE—¬@ohos.router¼../constants/LayoutConstants¹../cast/DeviceCastManager¶../utils/ScreenAdapter»../cast/DistributedGameData¹../cast/DeviceSelectPanelµ../cast/CastStatusBarÔrF—ªassertions¨external¢id¤meta±moduleSideEffectsªresolvedByµsyntheticNamedExportsAÃÙQ hvigor_ignore_E:_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.router.d.tsAÃªoh-resolveÂFAÂÙEE:\lezihuawei\target\entry\src\main\ets\constants\LayoutConstants.etsAÃªoh-resolveÂFAÂÙBE:\lezihuawei\target\entry\src\main\ets\cast\DeviceCastManager.etsAÃªoh-resolveÂFAÂÙ?E:\lezihuawei\target\entry\src\main\ets\utils\ScreenAdapter.etsAÃªoh-resolveÂFAÂÙDE:\lezihuawei\target\entry\src\main\ets\cast\DistributedGameData.etsAÃªoh-resolveÂFAÂÙBE:\lezihuawei\target\entry\src\main\ets\cast\DeviceSelectPanel.etsAÃªoh-resolveÂFAÂÙ>E:\lezihuawei\target\entry\src\main\ets\cast\CastStatusBar.etsAÃªoh-resolveÂ“ÔrG–§version¤fileªsourceRoot§sources¥names¨mappings«GamePage.js ‘¬GamePage.etsÜ9–”    ”  ”  ”  ”!  !”"  "˜”   ” ”	 	” ” ” ”6 6”7 7Ü ”   ” ”	 	” ” ” ” ” ”! !”- -”/ /”= =”? ?”ÌE ÌE”Ìc Ìc”Ìd Ìdš”   ” ”	 	” ” (”/ ;”1 =”7 ÌC”ÌR Ì^”ÌS Ì_˜”   ” ”	 	” ” ?”$ ÌE”ÌA Ìb”ÌB Ìc˜”   ” ”	 	” ” ”" "”= =”> >˜”   ” ”	 	” ” ” ”5 5”6 6–”  ' ” '” '” ' ” '"” '#Ü ”  ( ” (” (” (” (” (” (!” ("” ($” (%” ('” ((”  (*”! (+”" (,”# (-””  ) ” )” )” ) š” *” *” *	” *” *” *” *” *” *” *š” +” +” +	” +” +” +” +” +” +” +š” ,” ,” ,	” ,” ,” ,” ,” ,” ,” ,’” -” -’” 1” 1‘” / ’”4 2”5 2’”7 3”9 3’”6 4”8 4’”< 5"”ÌA 5'’”9 6”> 6$’”< 7"”ÌA 7'’”: 8”; 8 ’”9 9”: 9’”; : ”= :"’”> ;$”ÌB ;(””> =0”ÌQ =ÌC”ÌR =ÌD”Ì^ =ÌP’”? >$”ÌA >&’”Ì@ ?+”ÌB ?-’”< Ì@"”ÌA Ì@'’”ÌE ÌA+”ÌJ ÌA0’”7 ÌC”8 ÌC’”8 ÌD”9 ÌD’”4 ÌE”5 ÌE’”7 ÌF”8 ÌF’”: ÌG”; ÌG ’”> ÌH#”? ÌH$’”3 ÌI”5 ÌI!’”9 ÌJ”: ÌJ“” ÌL” ÌL” ÌL “” ÌM ” ÌM!” ÌM"’” ÌN” ÌN’” ÌO"” ÌO#’” ÌP#” ÌP$’” ÌQ*” ÌQ-’” ÌR%” ÌR'’” ÌS"” ÌS#•” ÌU+”, ÌU<”- ÌU=”8 ÌUÌH”: ÌUÌJ”” ÌV1”# ÌV5”6 ÌVÌH”8 ÌVÌJ’” ÌW” ÌW“” ÌX ” ÌX!” ÌX"’”0 ÌZÌE”ÌF ÌZÌ[’” Ì[” Ì[“”# Ì[”4 Ì[”; Ì[–” Ì\” Ì\” Ì\”! Ì\”" Ì\”3 Ì\%–” Ì]”# Ì]”% Ì]”) Ì]”* Ì]”9 Ì]+–” Ì^”! Ì^”# Ì^”' Ì^”( Ì^”5 Ì^'–” Ì_”! Ì_”# Ì_”' Ì_”( Ì_”5 Ì_'—” Ì`”" Ì`”$ Ì`”% Ì`”- Ì`'”/ Ì`)”1 Ì`+˜” Ìa” Ìa” Ìa”- Ìa”. Ìa”6 Ìa&”7 Ìa'”8 Ìa(’” Ìb” Ìb•” Ìc” Ìc” Ìc”  Ìc”" Ìc˜” Ìd” Ìd” Ìd”( Ìd”) Ìd”< Ìd,”> Ìd.”? Ìd/—” Ìe” Ìe” Ìe”* Ìe”- Ìe”2 Ìe"”3 Ìe#’” Ìf” Ìf•” Ìg” Ìg” Ìg”  Ìg”" Ìg–” Ìh” Ìh” Ìh”1 Ìh!”3 Ìh#”4 Ìh$’” Ìi” Ìi‘” Ìj’”, ÌZ
+”ÌH ÌZ&–” Ì\” Ì\”! Ì\”% Ì\”& Ì\”7 Ì\%–” Ì]”' Ì]”) Ì]”- Ì]”. Ì]”= Ì]+–” Ì^”% Ì^”' Ì^”+ Ì^”, Ì^”9 Ì^'–” Ì_”% Ì_”' Ì_”+ Ì_”, Ì_”9 Ì_'—” Ì`”& Ì`”( Ì`”) Ì`”1 Ì`'”3 Ì`)”5 Ì`+˜” Ìa”  Ìa”! Ìa”1 Ìa”2 Ìa”: Ìa&”; Ìa'”< Ìa(’” Ìb” Ìb•” Ìc” Ìc”! Ìc”$ Ìc”& Ìc˜” Ìd”  Ìd”! Ìd”, Ìd”- Ìd”Ì@ Ìd,”ÌB Ìd.”ÌC Ìd/—” Ìe”  Ìe”! Ìe”. Ìe”1 Ìe”6 Ìe"”7 Ìe#’” Ìf” Ìf•” Ìg” Ìg”! Ìg”$ Ìg”& Ìg–” Ìh”  Ìh”! Ìh”5 Ìh!”7 Ìh#”8 Ìh$’” Ìi” Ìi‘” Ìj”” Ìk” Ìk” Ìk” Ìk‘” -’” 2	” 2’” 2	” 2’” 3	” 3’” 3	” 3’” 4	” 4’” 4	” 4’” 5	” 5’” 5	” 5’” 6	” 6’” 6	” 6’” 7	” 7’” 7	” 7’” 8	” 8’” 8	” 8’” 9	” 9’” 9	” 9’” :	” :’” :	” :’” ;	” ;’” ;	” ;’” =	” =’” =	” =’” >	” >’” >	” >’” ?	” ?’” ?	” ?’” Ì@	” Ì@’” Ì@	” Ì@’” ÌA	” ÌA’” ÌA	” ÌA’” ÌC	” ÌC’” ÌC	” ÌC’” ÌD	” ÌD’” ÌD	” ÌD’” ÌE	” ÌE’” ÌE	” ÌE’” ÌF	” ÌF’” ÌF	” ÌF’” ÌG	” ÌG’” ÌG	” ÌG’” ÌH	” ÌH’” ÌH	” ÌH’” ÌI	” ÌI’” ÌI	” ÌI’” ÌJ	” ÌJ’” ÌJ	” ÌJ’” Ìn” Ìnš” Ìo” Ìo” Ìo	” Ìo” Ìo”* Ìo&”+ Ìo'”> Ìo:”Ì@ Ìo<”ÌA Ìo=™” Ìp” Ìp” Ìp”& Ìp"”' Ìp#”( Ìp$”/ Ìp4”1 Ìp6”3 Ìp8—” Ìq” Ìq
+” Ìq” Ìq”! Ìq”( Ìq"”) Ìq#”” Ìr”	 Ìr”
+ Ìr” Ìr—” Ìs” Ìs” Ìs	” Ìs” Ìs”# Ìs”$ Ìs –” Ìt” Ìt” Ìt	” Ìt” Ìt” Ìt–” Ìu” Ìu” Ìu	” Ìu” Ìu” Ìu–” Ìv” Ìv” Ìv	” Ìv” Ìv”  Ìv’” Ìw” Ìw’” Ìy” Ìy–” Ìz” Ìz” Ìz”( Ìz$”* Ìz&”+ Ìz'–” Ì{” Ì{” Ì{	” Ì{” Ì{” Ì{˜” Ì|” Ì|” Ì|	” Ì|” Ì|”$ Ì| ”& Ì|"”' Ì|#™” Ì}” Ì}” Ì}” Ì}” Ì}”! Ì}”" Ì}”# Ì}”% Ì}!˜” Ì~” Ì~” Ì~” Ì~” Ì~”* Ì~$”+ Ì~%”, Ì~&‘”	 Ì’” Ì€” Ì€’” Ì‚
+” Ì‚” Ìƒ” Ìƒ	” Ìƒ” Ìƒ” Ìƒ” Ìƒ” Ìƒ” Ìƒ” Ìƒ” Ìƒ”  Ìƒ”! Ìƒ”# Ìƒ”% Ìƒ!—” Ì„” Ì„
+” Ì„” Ì„” Ì„” Ì„” Ì„—” Ì…” Ì…
+” Ì…” Ì…” Ì…” Ì…”  Ì…™” Ì†” Ì†	” Ì†” Ì†” Ì†” Ì†”  Ì†”# Ì†”& Ì†™” Ì‡” Ì‡	” Ì‡” Ì‡” Ì‡” Ì‡”  Ì‡”# Ì‡”& Ì‡›” Ìˆ” Ìˆ” Ìˆ” Ìˆ” Ìˆ” Ìˆ” Ìˆ”% Ìˆ”' Ìˆ”* Ìˆ"”+ Ìˆ#›” Ì‰” Ì‰” Ì‰” Ì‰”  Ì‰”$ Ì‰”% Ì‰”+ Ì‰#”- Ì‰%”0 Ì‰(”3 Ì‰+›” ÌŠ” ÌŠ” ÌŠ” ÌŠ” ÌŠ”" ÌŠ”# ÌŠ”) ÌŠ!”+ ÌŠ#”. ÌŠ&”2 ÌŠ*“” Ì‹” Ì‹” Ì‹	‘”	 ÌŒ’” Ì” Ì’” Ì
+” Ì™” Ì” Ì” Ì	” Ì” Ì”& Ì"”' Ì#”* Ì&”, Ì(—” Ì‘” Ì‘
+” Ì‘” Ì‘” Ì‘”  Ì‘”! Ì‘–” Ì’” Ì’” Ì’” Ì’%” Ì’'” Ì’(™” Ì“” Ì“” Ì“” Ì“” Ì“”  Ì“”! Ì“”% Ì“”' Ì“!œ” Ì”” Ì”” Ì”” Ì”” Ì”” Ì”” Ì””! Ì””" Ì””# Ì””( Ì” ”) Ì”!–” Ì•” Ì•” Ì•” Ì•” Ì•” Ì••” Ì•” Ì•” Ì•” Ì•!” Ì•"•” Ì–” Ì–” Ì–” Ì–” Ì––” Ì—
+” Ì—” Ì—” Ì—” Ì—” Ì—Ü ” Ì˜
+” Ì˜” Ì˜” Ì˜” Ì˜” Ì˜” Ì˜”! Ì˜”" Ì˜”% Ì˜”& Ì˜”* Ì˜ ”+ Ì˜!”5 Ì˜+”8 Ì˜.”< Ì˜2”? Ì˜5”Ì@ Ì˜6”ÌA Ì˜7”ÌC Ì˜9”ÌD Ì˜:”ÌG Ì˜=”ÌK Ì˜ÌA”” Ì™
+” Ì™” Ì™” Ì™–” Ìš
+” Ìš” Ìš” Ìš” Ìš”  Ìš–” Ì›
+” Ì›” Ì›” Ì›” Ì›”& Ì›–” Ìœ
+” Ìœ” Ìœ” Ìœ” Ìœ”" Ìœ“” Ì	” Ì
+” Ì‘” Ì—” ÌŸ” ÌŸ
+” ÌŸ” ÌŸ” ÌŸ” ÌŸ”  ÌŸ–” Ì ”	 Ì ” Ì ” Ì 	” Ì 
+” Ì ’” Ì¡” Ì¡’” Ì£
+” Ì£˜” Ì¤” Ì¤” Ì¤	” Ì¤” Ì¤” Ì¤” Ì¤”  Ì¤œ” Ì¥” Ì¥” Ì¥	”# Ì¥”& Ì¥"”* Ì¥&”+ Ì¥'”6 Ì¥2”7 Ì¥3”ÌM Ì¥ÌI”ÌO Ì¥ÌK”ÌP Ì¥ÌL›” Ì¦” Ì¦” Ì¦	” Ì¦” Ì¦”3 Ì¦/”4 Ì¦0”5 Ì¦1”: Ì¦ÌK”< Ì¦ÌM”> Ì¦ÌO—” Ì§” Ì§
+” Ì§”  Ì§”# Ì§”( Ì§"”) Ì§#˜” Ì¨” Ì¨
+” Ì¨” Ì¨”- Ì¨'”. Ì¨(”7 Ì¨1”9 Ì¨3œ” Ì©” Ì©” Ì©”% Ì©”( Ì© ”, Ì©$”- Ì©%”8 Ì©0”9 Ì©1”ÌO Ì©ÌG”ÌQ Ì©ÌI”ÌR Ì©ÌJ›” Ìª” Ìª” Ìª”" Ìª”/ Ìª'”2 Ìª*”6 Ìª.”7 Ìª/”: Ìª2”< Ìª4”= Ìª5š” Ì«” Ì«” Ì«”$ Ì«”% Ì«”< Ì«4”= Ì«5”ÌF Ì«>”ÌG Ì«?”ÌH Ì«Ì@›” Ì¬” Ì¬” Ì¬”$ Ì¬”% Ì¬”4 Ì¬,”5 Ì¬-”6 Ì¬.”; Ì¬ÌA”= Ì¬ÌC”? Ì¬ÌE˜” Ì­
+” Ì­” Ì­”, Ì­"”- Ì­#”2 Ì­(”3 Ì­)”4 Ì­*”” Ì®” Ì®	” Ì®
+” Ì®‘” Ì¯˜” Ì¯” Ì¯” Ì¯” Ì¯”2 Ì¯.”3 Ì¯/”? Ì¯;”ÌA Ì¯=—” Ì°” Ì°” Ì°”% Ì°”( Ì° ”* Ì°"”+ Ì°#˜” Ì±” Ì±” Ì±”$ Ì±”% Ì±”, Ì±$”. Ì±&”/ Ì±'‘” Ì²”” Ì³”	 Ì³”
+ Ì³” Ì³›” Ì´” Ì´” Ì´	” Ì´” Ì´”. Ì´*”/ Ì´+”0 Ì´,”7 Ì´ÌA”9 Ì´ÌC”; Ì´ÌE—” Ìµ” Ìµ
+” Ìµ”" Ìµ”% Ìµ”, Ìµ&”- Ìµ'”” Ì¶”	 Ì¶”
+ Ì¶” Ì¶’” Ì·” Ì·’” Ì¹
+” Ì¹—” Ìº” Ìº” Ìº	” Ìº” Ìº”! Ìº”" Ìº—” Ì»” Ì»” Ì»	” Ì»”! Ì»”# Ì»”$ Ì» ˜” Ì¼” Ì¼” Ì¼	” Ì¼” Ì¼”- Ì¼)”/ Ì¼+”0 Ì¼,•” Ì½” Ì½” Ì½” Ì½” Ì½—” Ì¾” Ì¾
+” Ì¾” Ì¾”! Ì¾”& Ì¾ ”' Ì¾!–” Ì¿”	 Ì¿” Ì¿” Ì¿” Ì¿” Ì¿’” ÌÀ” ÌÀ–” ÌÂ
+”	 ÌÂ”
+ ÌÂ” ÌÂ ” ÌÂ!”# ÌÂ1” ÌÃ” ÌÃ
+” ÌÃ” ÌÃ” ÌÃ”" ÌÃ”# ÌÃ”. ÌÃ*”/ ÌÃ+”< ÌÃ8”= ÌÃ9”ÌE ÌÃÌA”ÌF ÌÃÌB”ÌG ÌÃÌC”” ÌÄ” ÌÄ” ÌÄ” ÌÄ˜” ÌÅ” ÌÅ
+” ÌÅ”- ÌÅ'”. ÌÅ(”3 ÌÅ-”5 ÌÅ/”6 ÌÅ0˜” ÌÆ” ÌÆ
+” ÌÆ” ÌÆ” ÌÆ”0 ÌÆ*”2 ÌÆ,”3 ÌÆ-—” ÌÇ” ÌÇ
+” ÌÇ” ÌÇ”! ÌÇ”& ÌÇ ”' ÌÇ!‘”	 ÌÈ’” ÌÉ” ÌÉ’” ÌË
+” ÌË˜” ÌÌ” ÌÌ” ÌÌ	” ÌÌ” ÌÌ”) ÌÌ%”+ ÌÌ'”, ÌÌ(’” ÌÍ” ÌÍ’” ÌÏ
+” ÌÏš” ÌĞ” ÌĞ” ÌĞ” ÌĞ”  ÌĞ”% ÌĞ!”8 ÌĞ4”9 ÌĞ5”ÌB ÌĞ>”ÌD ÌĞÌ@’” ÌÑ” ÌÑ‘”	 ÌÒ”” ÌÓ” ÌÓ
+” ÌÓ” ÌÓ%–” ÌÔ” ÌÔ” ÌÔ” ÌÔ” ÌÔ” ÌÔ–” ÌÕ” ÌÕ” ÌÕ” ÌÕ” ÌÕ”# ÌÕ›” ÌÖ” ÌÖ” ÌÖ” ÌÖ” ÌÖ”' ÌÖ!”( ÌÖ"”, ÌÖ&”- ÌÖ'”4 ÌÖ.”5 ÌÖ/–” Ì×” Ì×” Ì×” Ì×”  Ì×”- Ì×'–” ÌØ” ÌØ” ÌØ” ÌØ” ÌØ”' ÌØ!–” ÌÙ” ÌÙ” ÌÙ”! ÌÙ”" ÌÙ”1 ÌÙ+–” ÌÚ” ÌÚ” ÌÚ” ÌÚ” ÌÚ”) ÌÚ#–” ÌÛ” ÌÛ” ÌÛ” ÌÛ” ÌÛ”' ÌÛ!–” ÌÜ” ÌÜ” ÌÜ” ÌÜ” ÌÜ”+ ÌÜ%’”	 Ìİ”
+ Ìİš” ÌŞ” ÌŞ” ÌŞ	” ÌŞ” ÌŞ”* ÌŞ&”+ ÌŞ'”0 ÌŞ,”1 ÌŞ-”2 ÌŞ.’” Ìß” Ìß”” Ìá
+” Ìá” Ìá” Ìá1˜” Ìâ” Ìâ” Ìâ” Ìâ” Ìâ” Ìâ”  Ìâ”" ÌâÜ ” Ìã” Ìã” Ìã” Ìã” Ìã”  Ìã”' Ìã!”( Ìã"”, Ìã&”- Ìã'”. Ìã(”/ Ìã)”1 Ìã+”2 Ìã,”3 Ìã-”4 Ìã.”6 Ìã0”; Ìã5”Ì@ Ìã:”ÌA Ìã;”ÌI ÌãÌC”ÌJ ÌãÌD”ÌK ÌãÌE”” Ìä” Ìä
+” Ìä” Ìä˜” Ìå” Ìå” Ìå” Ìå” Ìå”% Ìå”& Ìå”' Ìå‘” Ìæ‘”	 Ìç’” Ìè” Ìè’” Ìê” Ìê˜” Ìë” Ìë” Ìë” Ìë” Ìë”  Ìë”! Ìë”# Ìë” Ìì” Ìì” Ìì”  Ìì”" Ìì”# Ìì”4 Ìì.”6 Ìì0”: Ìì4”; Ìì5”ÌH ÌìÌB”ÌI ÌìÌC”ÌJ ÌìÌD‘”	 Ìí˜” Ìî” Ìî” Ìî” Ìî” Ìî”  Ìî”! Ìî”# Ìî” Ìï” Ìï” Ìï”  Ìï”" Ìï”# Ìï”5 Ìï/”7 Ìï1”; Ìï5”< Ìï6”ÌI ÌïÌC”ÌJ ÌïÌD”ÌK ÌïÌE‘”	 Ìğ” Ìñ” Ìñ” Ìñ” Ìñ” Ìñ” Ìñ”0 Ìñ,”2 Ìñ.”6 Ìñ2”7 Ìñ3”ÌD ÌñÌ@”ÌE ÌñÌA”ÌF ÌñÌB’” Ìò” Ìò˜” Ìô” Ìô” Ìô” Ìô” Ìô” Ìô&” Ìô(”  Ìô6Ü ” Ìõ” Ìõ
+” Ìõ” Ìõ” Ìõ” Ìõ”, Ìõ(”0 Ìõ,”< Ìõ8”= Ìõ9”? Ìõ;”Ì@ Ìõ<”ÌP ÌõÌL”ÌR ÌõÌN”ÌV ÌõÌR”ÌW ÌõÌS”Ìd ÌõÌ`”Ìe ÌõÌa”Ìf ÌõÌbÜ ” Ìö” Ìö
+” Ìö” Ìö” Ìö”  Ìö”. Ìö*”2 Ìö.”> Ìö:”? Ìö;”ÌA Ìö=”ÌB Ìö>”ÌS ÌöÌO”ÌU ÌöÌQ”ÌY ÌöÌU”ÌZ ÌöÌV”Ìg ÌöÌc”Ìh ÌöÌd”Ìi ÌöÌeœ” Ì÷” Ì÷” Ì÷	” Ì÷” Ì÷” Ì÷” Ì÷” Ì÷”' Ì÷#”* Ì÷&”0 Ì÷,”2 Ì÷.”” Ìø” Ìø” Ìø” Ìø‘”	 Ìùœ” Ìú” Ìú” Ìú	” Ìú” Ìú” Ìú” Ìú” Ìú”( Ìú$”+ Ìú'”1 Ìú-”3 Ìú/”” Ìû” Ìû” Ìû” Ìû‘”	 Ìü™” Ìı” Ìı	” Ìı”! Ìı”% Ìı!”) Ìı%”* Ìı&”1 Ìı-”3 Ìı/Ü ” Ìş” Ìş”! Ìş”$ Ìş”% Ìş”& Ìş ”) Ìş#”7 Ìş1”8 Ìş2”9 Ìş3”: Ìş4”> Ìş8”? Ìş9”ÌB Ìş<”ÌC Ìş=”ÌD Ìş>”ÌG ÌşÌA”ÌU ÌşÌO”ÌV ÌşÌP”ÌW ÌşÌQ”ÌX ÌşÌR”Ì\ ÌşÌV”Ì] ÌşÌW”Ì^ ÌşÌXÜ ” Ìÿ” Ìÿ”$ Ìÿ”' Ìÿ!”( Ìÿ"”. Ìÿ(”1 Ìÿ+”? Ìÿ9”Ì@ Ìÿ:”ÌF ÌÿÌ@”ÌI ÌÿÌC”ÌM ÌÿÌG”ÌN ÌÿÌH”ÌU ÌÿÌO”ÌV ÌÿÌP”ÌZ ÌÿÌT”Ì[ ÌÿÌU”Ì\ ÌÿÌV–” Í ” Í 
+” Í ”" Í ”4 Í .”6 Í 0”” Í” Í” Í” Í‘” Í‘”	 Í”” Í” Í” Í” Í’” Í” Í’” Í” Íœ” Í” Í
+” Í” Í” Í” Í”# Í”& Í"”* Í&”+ Í'”4 Í0”5 Í1•” Í	” Í	” Í	” Í	” Í	”” Í	” Í	” Í	” Í	Ü ” Í
+” Í
+” Í
+” Í
+” Í
+” Í
+” Í
+” Í
+”  Í
+”( Í
+$”+ Í
+'”0 Í
+,”1 Í
+-”4 Í
+0”7 Í
+3”8 Í
+4”9 Í
+5’” Í” Í’” Í” Í—” Í” Í” Í” Í” Í” Í” Í”” Í” Í$” Í%” Í&Ÿ” Í” Í” Í” Í” Í” Í” Í” Í”. Í*”1 Í-”5 Í1”6 Í2”> Í:”? Í;”Ì@ Í<’” Í” Í’” Í” Í–” Í” Í” Í	” Í” Í” Í—” Í” Í” Í	” Í” Í” Í” Í™” Í” Í” Í	” Í” Í” Í” Í”) Í%”* Í&—” Í” Í” Í	” Í” Í” Í” Í—” Í” Í” Í	” Í” Í”! Í”" Í—” Í” Í” Í	” Í” Í” Í”  Í—” Í” Í” Í	” Í” Í”$ Í ”% Í!—” Í” Í” Í	” Í” Í” Í” Í—” Í” Í” Í	” Í” Í” Í” Í—” Í” Í” Í	” Í” Í” Í” Í—” Í” Í” Í	” Í” Í” Í” Í—” Í” Í” Í	” Í” Í” Í” Í—” Í” Í” Í	” Í” Í” Í” Í—” Í ” Í ” Í 	” Í ” Í ”  Í ”! Í š” Í!” Í!” Í!	” Í!” Í!”! Í!”" Í!”% Í!!”' Í!#”( Í!$•” Í#” Í#” Í#” Í#” Í#–” Í$” Í$
+” Í$” Í$” Í$” Í$–” Í%”	 Í%” Í%” Í%
+” Í%” Í%™” Í'” Í'” Í'	” Í'” Í'”$ Í' ”% Í'!”( Í'$”* Í'&–” Í(” Í(
+” Í(” Í(” Í(” Í(˜” Í)” Í)
+” Í)” Í)” Í)”! Í)”" Í)”$ Í)–” Í*” Í*” Í*” Í*” Í*” Í*‘” Í+–” Í,” Í,
+” Í,”& Í, ”( Í,"”) Í,#–” Í-”	 Í-” Í-” Í-” Í-” Í-’” Í.” Í.’” Í0” Í0” Í1” Í1
+” Í1” Í1” Í1” Í1”* Í1&”- Í1)”1 Í1-”2 Í1.”9 Í15”: Í16”Ì@ Í1<”ÌA Í1=” Í2” Í2	” Í2” Í2” Í2” Í2” Í2” Í2” Í2”% Í2!”' Í2#”( Í2$”* Í2&”, Í2(–” Í3” Í3
+” Í3”  Í3”" Í3”# Í3‘”	 Í4’” Í5” Í5’” Í7” Í7™” Í8” Í8
+” Í8” Í8” Í8” Í8”+ Í8'”- Í8)”. Í8*Ü ” Í9” Í9
+” Í9” Í9” Í9” Í9”, Í9(”0 Í9,”< Í98”= Í99”? Í9;”Ì@ Í9<”ÌP Í9ÌL”ÌR Í9ÌN”ÌV Í9ÌR”ÌW Í9ÌS”Ìd Í9Ì`”Ìe Í9Ìa”Ìf Í9ÌbÜ ” Í:” Í:
+” Í:” Í:” Í:”  Í:”. Í:*”2 Í:.”> Í::”? Í:;”ÌA Í:=”ÌB Í:>”ÌS Í:ÌO”ÌU Í:ÌQ”ÌY Í:ÌU”ÌZ Í:ÌV”Ìg Í:Ìc”Ìh Í:Ìd”Ìi Í:Ìe–” Í;” Í;
+” Í;” Í;” Í;” Í;˜” Í<” Í<
+” Í<” Í<” Í<”! Í<”' Í<#”( Í<$–” Í=” Í=
+” Í=” Í=” Í=” Í=˜” Í>” Í>
+” Í>” Í>” Í>”" Í>”( Í>$”) Í>%Ü ” Í@” Í@	” Í@” Í@” Í@” Í@” Í@” Í@” Í@”  Í@”! Í@”- Í@)”/ Í@+”0 Í@,”2 Í@.”4 Í@0Ü ” ÍA” ÍA” ÍA” ÍA” ÍA” ÍA”! ÍA”" ÍA”( ÍA"”* ÍA$”- ÍA'”. ÍA(”2 ÍA,”5 ÍA/”9 ÍA3”: ÍA4”; ÍA5Ü ” ÍB” ÍB” ÍB” ÍB” ÍB” ÍB”! ÍB”" ÍB”( ÍB"”* ÍB$”- ÍB'”. ÍB(”2 ÍB,”5 ÍB/”9 ÍB3”: ÍB4”; ÍB5” ÍC” ÍC
+” ÍC” ÍC”$ ÍC”% ÍC”& ÍC ”( ÍC"”) ÍC#”+ ÍC%”1 ÍC+”2 ÍC,”4 ÍC.”” ÍD” ÍD” ÍD”" ÍD"—” ÍE
+” ÍE” ÍE” ÍE” ÍE”% ÍE”' ÍE”” ÍF
+” ÍF” ÍF” ÍF”” ÍG
+” ÍG” ÍG” ÍG”” ÍH
+” ÍH” ÍH”" ÍH”” ÍI
+” ÍI” ÍI”  ÍI’” ÍJ	” ÍJ
+š” ÍK” ÍK” ÍK” ÍK” ÍK”! ÍK”" ÍK”+ ÍK#”, ÍK$”- ÍK%’” ÍL” ÍL‘” ÍM‘”	 ÍN’” ÍO” ÍO”” ÍQ” ÍQ” ÍQ” ÍQ–” ÍR” ÍR” ÍR	” ÍR” ÍR” ÍR’” ÍR” ÍR$™” ÍT” ÍT
+” ÍT” ÍT” ÍT” ÍT” ÍT” ÍT” ÍT˜” ÍU” ÍU” ÍU” ÍU” ÍU” ÍU”  ÍU”" ÍU” ÍV” ÍV
+” ÍV”  ÍV”$ ÍV”% ÍV”( ÍV"”+ ÍV%”/ ÍV)”0 ÍV*”; ÍV5”< ÍV6”= ÍV7‘”	 ÍW—” ÍX” ÍX” ÍX	” ÍX” ÍX” ÍX” ÍXŸ” ÍZ” ÍZ
+” ÍZ” ÍZ”& ÍZ"”' ÍZ#”) ÍZ%”* ÍZ&”3 ÍZ/”5 ÍZ1”9 ÍZ5”: ÍZ6”ÌG ÍZÌC”ÌH ÍZÌD”ÌI ÍZÌEš” Í[” Í[
+” Í[”  Í[”) Í[%”, Í[(”2 Í[.”3 Í[/”9 Í[5”: Í[6” Í\” Í\
+” Í\” Í\” Í\” Í\”! Í\”" Í\”$ Í\ ”' Í\#”6 Í\2”7 Í\3”8 Í\4–” Í^” Í^” Í^	” Í^” Í^” Í^š” Í_” Í_” Í_” Í_” Í_” Í_” Í_” Í_”& Í_"”( Í_$™” Í`” Í`
+” Í`” Í`” Í`”  Í`”! Í`”& Í` ”' Í`!‘”	 ÍaÜ !” Íc” Íc
+” Íc” Íc” Íc”  Íc”% Íc!”( Íc$”) Íc%”* Íc&”+ Íc'”, Íc(”0 Íc,”1 Íc-”6 Íc2”7 Íc3”= Íc9”Ì@ Íc<”ÌA Íc=”ÌE ÍcÌA”ÌF ÍcÌB”ÌK ÍcÌG”ÌN ÍcÌJ”ÌO ÍcÌK”ÌP ÍcÌL”ÌS ÍcÌO”ÌV ÍcÌR”ÌW ÍcÌS”ÌX ÍcÌT”ÌY ÍcÌU”ÌZ ÍcÌV”Ì[ ÍcÌW”Ì\ ÍcÌX™” Íd” Íd” Íd	” Íd” Íd” Íd” Íd”) Íd%”* Íd&–” Íe” Íe” Íe	” Íe” Íe” ÍeÜ ” Íg” Íg” Íg	” Íg” Íg” Íg” Íg”# Íg”$ Íg ”* Íg&”+ Íg'”, Íg(”- Íg1”/ Íg3”1 Íg5”2 Íg6”3 Íg7”4 Íg8”6 Íg:”; Íg?”ÌA ÍgÌE”ÌB ÍgÌF”ÌD ÍgÌH”ÌE ÍgÌI”ÌF ÍgÌJ–” Íh” Íh” Íh	” Íh” Íh” Íh–” Íi” Íi” Íi	”" Íi”$ Íi ”% Íi!’” Íj” Íj’” Íl” Íl–” Ím” Ím” Ím	” Ím” Ím” Ím’” Ím” Ím$–” Ín” Ín” Ín	” Ín” Ín” Ín—” Ío” Ío” Ío	” Ío” Ío” Ío” Ío’” Íp” Íp’” Ír” Ír	—” Ís” Ís” Ís	” Ís” Ís”" Ís”# Ís—” Ít” Ít” Ít	” Ít” Ít” Ít” Ít—” Íu” Íu” Íu	” Íu” Íu” Íu” Íu–” Ív” Ív” Ív	” Ív” Ív” Ív–” Íw” Íw” Íw	” Íw” Íw” Íw–” Íx” Íx” Íx	”" Íx”$ Íx ”% Íx!’” Íy” Íy’” Í{” Í{
+™” Í|” Í|” Í|” Í|” Í|” Í|”  Í|”! Í|”# Í|˜” Í}” Í}” Í}” Í}” Í}”( Í}"”) Í}#”* Í}$˜” Í~” Í~
+” Í~” Í~” Í~” Í~” Í~”  Í~‘”	 Í™” Í€” Í€” Í€” Í€” Í€”! Í€”" Í€”# Í€”% Í€!˜” Í” Í” Í” Í” Í”* Í$”+ Í%”, Í&˜” Í‚” Í‚
+” Í‚” Í‚” Í‚”  Í‚”! Í‚”" Í‚‘”	 Íƒ’” Í„” Í„’” Í†” Í†”” Í‡” Í‡
+” Í‡” Í‡"–” Íˆ” Íˆ” Íˆ” Íˆ” Íˆ” Íˆ™” Í‰” Í‰
+” Í‰” Í‰” Í‰” Í‰” Í‰”+ Í‰%”- Í‰'–” ÍŠ” ÍŠ
+” ÍŠ” ÍŠ” ÍŠ” ÍŠ–” Í‹” Í‹” Í‹” Í‹” Í‹”" Í‹–” ÍŒ” ÍŒ” ÍŒ” ÍŒ” ÍŒ”# ÍŒ—” Í” Í” Í” Í”  Í”0 Í*”2 Í,’”	 Í”
+ Í˜” Í” Í” Í” Í” Í”" Í”# Í”$ Í Ü ” Í” Í” Í” Í” Í” Í” Í#” Í%” Í2”  Í4”" Í6”# Í7”$ Í8”% Í9”* Í>”- ÍÌA”. ÍÌB”/ ÍÌC”4 ÍÌH”5 ÍÌI”6 ÍÌJ˜” Í‘” Í‘” Í‘” Í‘” Í‘”! Í‘”# Í‘”% Í‘!œ” Í’” Í’” Í’”% Í’”& Í’ ”+ Í’%”, Í’&”- Í’'”/ Í’)”1 Í’+”2 Í’,”3 Í’-‘”	 Í“’” Í”” Í”‘” Í–’” Í—” Í—	–” Í—” Í—	” Í#” Í#
+” Í#” Í#–” Í—” Í—	” Í$” Í$” Í$” Í$˜” Í—” Í—	” Í%” Í%” Í%”( Í%”) Í%”/ Í%"’” Í˜” Í˜–” Í˜” Í˜” Í‰” Í‰” Í‰” Í‰–” Í˜” Í˜” ÍŠ” ÍŠ” ÍŠ”  ÍŠ•” Í˜” Í˜” Í‹”! Í‹”" Í‹”” ÍŒ” ÍŒ” ÍŒ” ÍŒÜ ” Í” Í” Í” Í” Í”# Í”% Í”( Í ”) Í!”+ Í#”, Í$”5 Í-”7 Í/”: Í2”; Í3”= Í5”> Í6”ÌG Í?”ÌI ÍÌA”ÌL ÍÌD”ÌM ÍÌE”ÌN ÍÌF‘” Í˜” Í˜” Í˜” Í”! Í”" Í”+ Í”, Í ”2 Í&˜” Í˜” Í˜” Í” Í” Í”- Í!”. Í"”4 Í(˜” Í¡	” Í¡” Í¡”  Í¡”# Í¡”% Í¡”& Í¡”( Í¡“”, Í™”9 Í™”Ì@ Í™–” Íš
+”' Íš”) Íš”- Íš”. Íš ”= Íš/–” Í›
+”( Í›”* Í›”. Í› ”/ Í›!”? Í›1–” Íœ
+”% Íœ”' Íœ”+ Íœ”, Íœ”9 Íœ+•” Í
+”$ Í”& Í”) Í”+ Í–” Í”  Í”! Í”/ Í”1 Í!”2 Í"’” ÍŸ
+” ÍŸ‘” Í 	–” Íš
+”+ Íš”- Íš”1 Íš”2 Íš ”ÌA Íš/–” Í›
+”, Í›”. Í›”2 Í› ”3 Í›!”ÌC Í›1–” Íœ
+”) Íœ”+ Íœ”/ Íœ”0 Íœ”= Íœ+•” Í
+”( Í”* Í”- Í”/ Í–”  Í”$ Í”% Í”3 Í”5 Í!”6 Í"’” ÍŸ
+” ÍŸ–” Íš
+”' Íš”) Íš”- Íš”. Íš ”= Íš/–” Í›
+”( Í›”* Í›”. Í› ”/ Í›!”? Í›1–” Íœ
+”% Íœ”' Íœ”+ Íœ”, Íœ”9 Íœ+–” Í£” Í£” Í£” Í£”$ Í£ ”& Í£"’” Í¤
+” Í¤–” Í¤
+” Í¤” Í”$ Í”% Í”+ Í–” Í¤
+” Í¤” Í”% Í”& Í”, Í˜” Í¤
+” Í¤” Í”- Í”. Í”7 Í#”8 Í$”> Í*˜” Í¤
+” Í¤” Í”) Í”* Í”9 Í%”: Í&”Ì@ Í,”” Í¥” Í¥”$ Í¥”* Í¥Ÿ” Í¥” Í¥” Í¦”% Í¦”& Í¦”2 Í¦$”3 Í¦%”5 Í¦'”6 Í¦(”ÌC Í¦5”ÌE Í¦7”ÌI Í¦;”ÌJ Í¦<”ÌW Í¦ÌI”ÌX Í¦ÌJ–” Í¥” Í¥” Í§”& Í§”' Í§”0 Í§"˜” Í¥” Í¥” Í¨”' Í¨”( Í¨”2 Í¨$”3 Í¨%”7 Í¨)Ü ” Í¥” Í¥” Í©”' Í©”( Í©”* Í©”0 Í©"”2 Í©$”3 Í©%”5 Í©'”: Í©,”< Í©.”ÌM Í©?”ÌO Í©ÌA”ÌV Í©ÌH”ÌX Í©ÌJ”ÌY Í©ÌK”Ì[ Í©ÌM”Ìb Í©ÌT”Ìd Í©ÌV”Ìe Í©ÌW”Ìg Í©ÌY’” Í¥” Í¥’” Í«” Í«š” Í«” Í«” ÍÁ”" ÍÁ”# ÍÁ”% ÍÁ”( ÍÁ”* ÍÁ”, ÍÁ”. ÍÁ”” Í¬” Í¬”$ Í¬”+ Í¬Ÿ” Í¬” Í¬” Í­”% Í­”& Í­”2 Í­&”3 Í­'”5 Í­)”6 Í­*”ÌC Í­7”ÌE Í­9”ÌI Í­=”ÌJ Í­>”ÌW Í­ÌK”ÌX Í­ÌL–” Í¬” Í¬” Í®”& Í®”' Í®”0 Í®$˜” Í¬” Í¬” Í¯”' Í¯”( Í¯”2 Í¯&”3 Í¯'”7 Í¯+’” Í¬” Í¬’” Í±” Í±Ÿ”  Í²”& Í²”7 Í²”< Í²”= Í²”ÌE Í²%”ÌG Í²'”ÌI Í²)”ÌK Í²+”ÌO Í²/”ÌQ Í²1”Ì[ Í²;”Ì\ Í²<”Ìb Í²ÌB”Ìd Í²ÌDŸ”  Í²”& Í²”' Í³”, Í³”- Í³”9 Í³%”: Í³&”< Í³(”= Í³)”ÌL Í³8”ÌN Í³:”ÌR Í³>”ÌS Í³?”Ì` Í³ÌL”Ìa Í³ÌMŸ”  Í²”& Í²”' Í´”- Í´”. Í´”: Í´&”; Í´'”= Í´)”> Í´*”ÌM Í´9”ÌO Í´;”ÌS Í´?”ÌT Í´Ì@”Ìa Í´ÌM”Ìb Í´ÌNŸ”  Í²”& Í²”' Íµ”/ Íµ”0 Íµ”< Íµ(”= Íµ)”? Íµ+”Ì@ Íµ,”ÌS Íµ?”ÌU ÍµÌA”ÌY ÍµÌE”ÌZ ÍµÌF”Ìg ÍµÌS”Ìh ÍµÌT–”  Í²”& Í²”' Í¶”0 Í¶”1 Í¶”: Í¶&˜”  Í²”& Í²”' Í·”1 Í·”2 Í·”< Í·(”= Í·)”ÌA Í·-Ü ”  Í²”& Í²”' Í¸”6 Í¸"”7 Í¸#”; Í¸'”< Í¸(”ÌG Í¸3”ÌL Í¸8”ÌQ Í¸=”ÌR Í¸>”ÌS Í¸?”ÌT Í¸Ì@”Ì] Í¸ÌI”Ì^ Í¸ÌJ”Ì_ Í¸ÌK”Ì` Í¸ÌL”Ìz Í¸ÌfŸ”  Í²”& Í²”' Í¹”3 Í¹”4 Í¹ ”Ì@ Í¹,”ÌA Í¹-”ÌC Í¹/”ÌD Í¹0”Ì[ Í¹ÌG”Ì] Í¹ÌI”Ìa Í¹ÌM”Ìb Í¹ÌN”Ìo Í¹Ì[”Ìp Í¹Ì\–”  Í²”& Í²”' Íº”. Íº”/ Íº”0 Íºš”  Í²”& Í²”' Í»”- Í»”. Í»”0 Í»”4 Í» ”6 Í»"”7 Í»#”9 Í»%—”  Í²”& Í²”' Í¼”. Í¼”/ Í¼”2 Í¼”4 Í¼ —”$ Í½”( Í½”) Í½”4 Í½$”7 Í½'”< Í½,”= Í½-’”  Í¾”! Í¾’” Í²”" Í²œ”; Í±”ÌG Í±"”Ìa Í¿”Ìb Í¿”Ìg Í¿”Ìi Í¿!”Ìk Í¿#”Ìl Í¿$”Ìq Í¿)”Ìr Í¿*”Ìz Í¿2”Ì| Í¿4’” Í±” Í±’” Í«” Í«’” ÍÃ” ÍÃš” ÍÃ” ÍÃ” ÍØ”" ÍØ”# ÍØ”% ÍØ”( ÍØ”* ÍØ”, ÍØ”. ÍØ”” ÍÄ” ÍÄ”$ ÍÄ”+ ÍÄŸ” ÍÄ” ÍÄ” ÍÅ”% ÍÅ”& ÍÅ”2 ÍÅ&”3 ÍÅ'”5 ÍÅ)”6 ÍÅ*”ÌC ÍÅ7”ÌE ÍÅ9”ÌI ÍÅ=”ÌJ ÍÅ>”ÌW ÍÅÌK”ÌX ÍÅÌL–” ÍÄ” ÍÄ” ÍÆ”& ÍÆ”' ÍÆ”0 ÍÆ$˜” ÍÄ” ÍÄ” ÍÇ”' ÍÇ”( ÍÇ”2 ÍÇ&”3 ÍÇ'”7 ÍÇ+’” ÍÄ” ÍÄ’” ÍÉ” ÍÉ–”  ÍÊ”& ÍÊ”7 ÍÊ”; ÍÊ”< ÍÊ”ÌA ÍÊ!Ÿ”  ÍÊ”& ÍÊ”' ÍË”, ÍË”- ÍË”9 ÍË%”: ÍË&”< ÍË(”= ÍË)”ÌL ÍË8”ÌN ÍË:”ÌR ÍË>”ÌS ÍË?”Ì` ÍËÌL”Ìa ÍËÌMŸ”  ÍÊ”& ÍÊ”' ÍÌ”- ÍÌ”. ÍÌ”: ÍÌ&”; ÍÌ'”= ÍÌ)”> ÍÌ*”ÌN ÍÌ:”ÌP ÍÌ<”ÌT ÍÌÌ@”ÌU ÍÌÌA”Ìb ÍÌÌN”Ìc ÍÌÌOŸ”  ÍÊ”& ÍÊ”' ÍÍ”/ ÍÍ”0 ÍÍ”< ÍÍ(”= ÍÍ)”? ÍÍ+”Ì@ ÍÍ,”ÌR ÍÍ>”ÌT ÍÍÌ@”ÌX ÍÍÌD”ÌY ÍÍÌE”Ìf ÍÍÌR”Ìg ÍÍÌS–”  ÍÊ”& ÍÊ”' ÍÎ”0 ÍÎ”1 ÍÎ”: ÍÎ&˜”  ÍÊ”& ÍÊ”' ÍÏ”1 ÍÏ”2 ÍÏ”< ÍÏ(”= ÍÏ)”ÌA ÍÏ-Ü ”  ÍÊ”& ÍÊ”' ÍĞ”6 ÍĞ"”7 ÍĞ#”; ÍĞ'”< ÍĞ(”ÌF ÍĞ2”ÌK ÍĞ7”ÌO ÍĞ;”ÌP ÍĞ<”ÌU ÍĞÌA”ÌV ÍĞÌB”ÌW ÍĞÌC”ÌX ÍĞÌD”Ìa ÍĞÌM”Ìb ÍĞÌN”Ìc ÍĞÌO”Ìd ÍĞÌP”Ì~ ÍĞÌjŸ”  ÍÊ”& ÍÊ”' ÍÑ”3 ÍÑ”4 ÍÑ ”Ì@ ÍÑ,”ÌA ÍÑ-”ÌC ÍÑ/”ÌD ÍÑ0”ÌZ ÍÑÌF”Ì\ ÍÑÌH”Ì` ÍÑÌL”Ìa ÍÑÌM”Ìn ÍÑÌZ”Ìo ÍÑÌ[š”  ÍÊ”& ÍÊ”' ÍÒ”- ÍÒ”. ÍÒ”0 ÍÒ”4 ÍÒ ”6 ÍÒ"”7 ÍÒ#”9 ÍÒ%—”  ÍÊ”& ÍÊ”' ÍÓ”. ÍÓ”/ ÍÓ”2 ÍÓ”4 ÍÓ ™”$ ÍÔ”( ÍÔ”) ÍÔ”3 ÍÔ#”6 ÍÔ&”: ÍÔ*”; ÍÔ+”Ì@ ÍÔ0”ÌA ÍÔ1’”  ÍÕ”! ÍÕ’” ÍÊ”" ÍÊ”; ÍÉ”ÌF ÍÉ!”Ì` ÍÖ”Ìa ÍÖ”Ìe ÍÖ"”Ìg ÍÖ$”Ìi ÍÖ&”Ìj ÍÖ'”Ìn ÍÖ+”Ìo ÍÖ,”Ìt ÍÖ1”Ìu ÍÖ2”Ì} ÍÖ:”Ì ÍÖ<’” ÍÉ” ÍÉ’” ÍÃ” ÍÃ’” ÍÚ” ÍÚš” ÍÚ” ÍÚ” Íï”" Íï”# Íï”% Íï”( Íï”* Íï”, Íï”. Íï”” ÍÛ” ÍÛ”$ ÍÛ”+ ÍÛŸ” ÍÛ” ÍÛ” ÍÜ”% ÍÜ”& ÍÜ”2 ÍÜ&”3 ÍÜ'”5 ÍÜ)”6 ÍÜ*”ÌC ÍÜ7”ÌE ÍÜ9”ÌI ÍÜ=”ÌJ ÍÜ>”ÌW ÍÜÌK”ÌX ÍÜÌL–” ÍÛ” ÍÛ” Íİ”& Íİ”' Íİ”0 Íİ$˜” ÍÛ” ÍÛ” ÍŞ”' ÍŞ”( ÍŞ”2 ÍŞ&”3 ÍŞ'”7 ÍŞ+’” ÍÛ” ÍÛ’” Íà” Íà–”  Íá”& Íá”7 Íá”? Íá”ÌB Íá"”ÌE Íá%Ÿ”  Íá”& Íá”' Íâ”, Íâ”- Íâ”9 Íâ%”: Íâ&”< Íâ(”= Íâ)”ÌP Íâ<”ÌR Íâ>”ÌV ÍâÌB”ÌW ÍâÌC”Ìd ÍâÌP”Ìe ÍâÌQŸ”  Íá”& Íá”' Íã”- Íã”. Íã”: Íã&”; Íã'”= Íã)”> Íã*”ÌR Íã>”ÌT ÍãÌ@”ÌX ÍãÌD”ÌY ÍãÌE”Ìf ÍãÌR”Ìg ÍãÌSŸ”  Íá”& Íá”' Íä”/ Íä”0 Íä”< Íä(”= Íä)”? Íä+”Ì@ Íä,”ÌV ÍäÌB”ÌX ÍäÌD”Ì\ ÍäÌH”Ì] ÍäÌI”Ìj ÍäÌV”Ìk ÍäÌW–”  Íá”& Íá”' Íå”0 Íå”1 Íå”: Íå&˜”  Íá”& Íá”' Íæ”1 Íæ”2 Íæ”< Íæ(”= Íæ)”ÌA Íæ-Ü ”  Íá”& Íá”' Íç”6 Íç"”7 Íç#”; Íç'”< Íç(”ÌH Íç4”ÌM Íç9”ÌU ÍçÌA”ÌV ÍçÌB”ÌW ÍçÌC”ÌX ÍçÌD”Ìa ÍçÌM”Ìb ÍçÌN”Ìc ÍçÌO”Ìd ÍçÌP”Ì~ ÍçÌjŸ”  Íá”& Íá”' Íè”3 Íè”4 Íè ”Ì@ Íè,”ÌA Íè-”ÌC Íè/”ÌD Íè0”Ì^ ÍèÌJ”Ì` ÍèÌL”Ìd ÍèÌP”Ìe ÍèÌQ”Ìr ÍèÌ^”Ìs ÍèÌ_š”  Íá”& Íá”' Íé”- Íé”. Íé”0 Íé”4 Íé ”6 Íé"”7 Íé#”9 Íé%—”  Íá”& Íá”' Íê”. Íê”/ Íê”2 Íê”4 Íê —”$ Íë”( Íë”) Íë”5 Íë%”8 Íë(”Ì@ Íë0”ÌA Íë1’”  Íì”! Íì’” Íá”" ÍáÜ ”; Íà”< Íà”> Íà”Ì@ Íà”ÌB Íà”ÌD Íà”ÌF Íà!”ÌG Íà"”Ìa Íí”Ìb Íí”Ìj Íí"”Ìl Íí$”Ìn Íí&”Ìo Íí'”Ìw Íí/”Ìx Íí0”Ì€ Íí8”Ì‚ Íí:’” Íà” Íà’” ÍÚ” ÍÚ”” Íñ” Íñ”/ Íñ”5 ÍñŸ” Íñ” Íñ” Íò”$ Íò”% Íò”1 Íò!”2 Íò"”4 Íò$”5 Íò%”ÌE Íò5”ÌG Íò7”ÌK Íò;”ÌL Íò<”ÌY ÍòÌI”ÌZ ÍòÌJŸ” Íñ” Íñ” Íó”% Íó”& Íó”2 Íó"”3 Íó#”5 Íó%”6 Íó&”ÌG Íó7”ÌI Íó9”ÌM Íó=”ÌN Íó>”Ì[ ÍóÌK”Ì\ ÍóÌLŸ” Íñ” Íñ” Íô”' Íô”( Íô”4 Íô$”5 Íô%”7 Íô'”8 Íô(”ÌK Íô;”ÌM Íô=”ÌQ ÍôÌA”ÌR ÍôÌB”Ì_ ÍôÌO”Ì` ÍôÌP–” Íñ” Íñ” Íõ”. Íõ”/ Íõ”8 Íõ(–” Íñ” Íñ” Íö”+ Íö”, Íö”. ÍöÜ ” Íñ” Íñ” Í÷”% Í÷”& Í÷”( Í÷”. Í÷”0 Í÷ ”2 Í÷"”4 Í÷$”9 Í÷)”; Í÷+”ÌQ Í÷ÌA”ÌS Í÷ÌC”ÌZ Í÷ÌJ”Ì\ Í÷ÌL”Ì] Í÷ÌM”Ì_ Í÷ÌO”Ìf Í÷ÌV”Ìh Í÷ÌX”Ìi Í÷ÌY”Ìk Í÷Ì[š” Íñ” Íñ” Íø”% Íø”& Íø”( Íø”+ Íø”- Íø”/ Íø”1 Íø!—” Íñ” Íñ” Íù”& Íù”' Íù”* Íù”, Íù–” Íú”  Íú”! Íú”* Íú”, Íú ”- Íú!’” Íû” Íû’” Íñ” Íñ–” Íı” Íı”  Íı”! Íı”7 Íı+”9 Íı-””$ Íş”* Íş”; Íş”ÌB ÍşŸ”$ Íş”* Íş”+ Íÿ”0 Íÿ”1 Íÿ”= Íÿ#”> Íÿ$”ÌD Íÿ*”ÌE Íÿ+”ÌT Íÿ:”ÌV Íÿ<”ÌZ ÍÿÌ@”Ì[ ÍÿÌA”Ìh ÍÿÌN”Ìi ÍÿÌOŸ”$ Íş”* Íş”+ Í ”1 Í ”2 Í ”> Í $”? Í %”ÌE Í +”ÌF Í ,”ÌV Í <”ÌX Í >”Ì\ Í ÌB”Ì] Í ÌC”Ìj Í ÌP”Ìk Í ÌQŸ”$ Íş”* Íş”+ Í”3 Í”4 Í”Ì@ Í&”ÌA Í'”ÌG Í-”ÌH Í.”ÌZ ÍÌ@”Ì\ ÍÌB”Ì` ÍÌF”Ìa ÍÌG”Ìn ÍÌT”Ìo ÍÌU–”$ Íş”* Íş”+ Í”: Í ”; Í!”ÌD Í*–”$ Íş”* Íş”+ Í”7 Í”8 Í”: Í š”$ Íş”* Íş”+ Í”1 Í”2 Í”4 Í”7 Í”9 Í”; Í!”= Í#—”$ Íş”* Íş”+ Í”2 Í”3 Í”6 Í”8 Í–”( Í”, Í”- Í”ÌA Í+”ÌC Í-”ÌD Í.˜”( Í”, Í”- Í”ÌI Í3”ÌJ Í4”ÌN Í8”ÌP Í:”ÌQ Í;’”$ Í”% Í’”  Íş”& Íş‘” Í	‘” Í	’” Í¤
+” Í¤‘” Í	‘” Í	œ” Í” Í” Í” Í” Í”% Í!”) Í%”* Í&”. Í*”/ Í+”9 Í5”; Í7’” Í
+” Í–” Í
+” Í” Í…”$ Í…”% Í…”+ Í…˜” Í
+” Í” Í†”) Í†”* Í†”9 Í†%”: Í†&”Ì@ Í†,’” Í” Í–” Í” Í” ÍG”! ÍG”" ÍG”' ÍGÜ ” Í” Í” ÍH”# ÍH”$ ÍH”& ÍH”* ÍH”, ÍH”. ÍH”0 ÍH!”5 ÍH&”7 ÍH(”9 ÍH*”; ÍH,”> ÍH/”Ì@ ÍH1”ÌB ÍH3”ÌD ÍH5”ÌJ ÍH;”ÌL ÍH=”ÌN ÍH?”ÌP ÍHÌA–” Í” Í” ÍI”+ ÍI”, ÍI”Ì@ ÍI1–” Í” Í” ÍJ”( ÍJ”) ÍJ”+ ÍJÜ ” Í” Í” ÍK”" ÍK”# ÍK”% ÍK”( ÍK”* ÍK”6 ÍK'”7 ÍK(”9 ÍK*”: ÍK+”ÌH ÍK9”ÌJ ÍK;”ÌN ÍK?”ÌO ÍKÌ@”Ì\ ÍKÌM”Ì] ÍKÌN”Ì_ ÍKÌP˜” Í” Í” ÍL”& ÍL”' ÍL”4 ÍL%”5 ÍL&”; ÍL,’” Í” Í˜” Í” Í” Í”) Í”* Í”9 Í)”: Í*”Ì@ Í0˜” Í” Í”$ Í”' Í”+ Í”, Í”1 Í"”3 Í$Ü ” Í” Í” Í”% Í”& Í”* Í ”+ Í!”8 Í.”9 Í/”: Í0”; Í1”= Í3”> Í4”? Í5”Ì@ Í6”ÌB Í8–” Í” Í” Í”& Í”' Í”0 Í&˜” Í” Í” Í”' Í”( Í”2 Í(”3 Í)”7 Í-’” Í” Í”” Í” Í”$ Í”( ÍÜ ” Í” Í” Í”% Í”& Í”* Í ”+ Í!”8 Í.”9 Í/”: Í0”; Í1”= Í3”> Í4”? Í5”Ì@ Í6”ÌB Í8–” Í” Í” Í”& Í”' Í”> Í4’” Í” Í’” Í” Í’” Í” Í’” Í” Í’” Í!” Í!˜” Í!” Í!” Í*”) Í*”* Í*”9 Í*)”: Í**”Ì@ Í*0˜” Í"” Í"”$ Í"”' Í"”+ Í"”, Í"”4 Í"%”7 Í"(Ü ” Í"” Í"” Í#”% Í#”& Í#”* Í# ”+ Í#!”8 Í#.”9 Í#/”: Í#0”; Í#1”= Í#3”> Í#4”? Í#5”Ì@ Í#6”ÌB Í#8Ü ” Í"” Í"” Í$”& Í$”' Í$”+ Í$!”, Í$"”4 Í$*”8 Í$.”9 Í$/”: Í$0”; Í$1”< Í$2”ÌE Í$;”ÌF Í$<”ÌG Í$=”ÌH Í$>”ÌQ Í$ÌG˜” Í"” Í"” Í%”' Í%”( Í%”2 Í%(”3 Í%)”7 Í%-’” Í"” Í"”” Í&” Í&”$ Í&”* Í&Ü ” Í&” Í&” Í'”% Í'”& Í'”* Í' ”+ Í'!”8 Í'.”9 Í'/”: Í'0”; Í'1”= Í'3”> Í'4”? Í'5”Ì@ Í'6”ÌB Í'8–” Í&” Í&” Í(”& Í(”' Í(”> Í(4’” Í&” Í&’” Í!” Í!’” Í,” Í,’” Í,” Í,’” Í.” Í.˜” Í.” Í.” Í7”) Í7”* Í7”9 Í7)”: Í7*”Ì@ Í70™” Í/” Í/”$ Í/”' Í/”+ Í/”, Í/”7 Í/(”9 Í/*”< Í/-Ü ” Í/” Í/” Í0”% Í0”& Í0”* Í0 ”+ Í0!”8 Í0.”9 Í0/”: Í00”; Í01”= Í03”> Í04”? Í05”Ì@ Í06”ÌB Í08–” Í/” Í/” Í1”& Í1”' Í1”0 Í1&˜” Í/” Í/” Í2”' Í2”( Í2”2 Í2(”3 Í2)”7 Í2-’” Í/” Í/”” Í3” Í3”$ Í3”) Í3Ü ” Í3” Í3” Í4”% Í4”& Í4”* Í4 ”+ Í4!”8 Í4.”9 Í4/”: Í40”; Í41”= Í43”> Í44”? Í45”Ì@ Í46”ÌB Í48–” Í3” Í3” Í5”& Í5”' Í5”> Í54’” Í3” Í3’” Í.” Í.˜” Í9” Í9”  Í9”! Í9”& Í9”) Í9”* Í9 ”, Í9"’”$ Í:”) Í:’”  Í:”% Í:’”$ Í;”* Í;˜”$ Í;”* Í;”+ ÍD”5 ÍD”6 ÍD”ÌE ÍD+”ÌF ÍD,”ÌL ÍD2˜”$ Í<”( Í<”0 Í<”4 Í<”8 Í<”9 Í< ”> Í<%”Ì@ Í<'Ü ”$ Í<”( Í<”) Í=”1 Í=”2 Í=”6 Í="”7 Í=#”ÌD Í=0”ÌE Í=1”ÌF Í=2”ÌG Í=3”ÌI Í=5”ÌJ Í=6”ÌK Í=7”ÌL Í=8”ÌN Í=:–”$ Í<”( Í<”) Í>”2 Í>”3 Í>”< Í>(˜”$ Í<”( Í<”) Í?”3 Í?”4 Í? ”> Í?*”? Í?+”ÌC Í?/’”  Í<”$ Í<””$ Í@”( Í@”0 Í@”4 Í@Ü ”$ Í@”( Í@”) ÍA”1 ÍA”2 ÍA”6 ÍA"”7 ÍA#”ÌD ÍA0”ÌE ÍA1”ÌF ÍA2”ÌG ÍA3”ÌI ÍA5”ÌJ ÍA6”ÌK ÍA7”ÌL ÍA8”ÌN ÍA:–”$ Í@”( Í@”) ÍB”2 ÍB”3 ÍB”ÌJ ÍB6’”  Í@”$ Í@’”  Í;”& Í;‘” ÍE‘” ÍE’” Í” ÍÜ ” ÍN”  ÍN”( ÍN”* ÍN”/ ÍN”1 ÍN”5 ÍN"”6 ÍN#”> ÍN+”Ì@ ÍN-”ÌE ÍN2”ÌG ÍN4”ÌK ÍN8”ÌL ÍN9”ÌX ÍNÌE”ÌZ ÍNÌG”Ì^ ÍNÌK”Ì` ÍNÌM”Ìl ÍNÌY”Ìm ÍNÌZ”Ìs ÍNÌ`”Ìu ÍNÌb–” ÍN”  ÍN”! ÍO”& ÍO”' ÍO”, ÍOÜ ” ÍN”  ÍN”! ÍP”& ÍP”' ÍP”+ ÍP”, ÍP”4 ÍP"”8 ÍP&”9 ÍP'”: ÍP(”; ÍP)”< ÍP*”ÌE ÍP3”ÌF ÍP4”ÌG ÍP5”ÌH ÍP6”ÌQ ÍP?–” ÍN”  ÍN”! ÍQ”0 ÍQ”1 ÍQ”ÌH ÍQ6–” ÍN”  ÍN”! ÍR”- ÍR”. ÍR”/ ÍRš” ÍN”  ÍN”! ÍS”' ÍS”( ÍS”* ÍS”- ÍS”/ ÍS”0 ÍS”2 ÍS Ü ” ÍN”  ÍN”! ÍT”& ÍT”' ÍT”) ÍT”4 ÍT"”6 ÍT$”: ÍT(”; ÍT)”ÌH ÍT6”ÌI ÍT7”ÌJ ÍT8”ÌK ÍT9”ÌL ÍT:”ÌM ÍT;”ÌN ÍT<”ÌO ÍT=”ÌP ÍT>”ÌR ÍTÌ@’” ÍV” ÍV–” ÍV” ÍV” Íz”# Íz”$ Íz”) ÍzŸ” ÍV” ÍV” Í{”$ Í{”% Í{”3 Í{"”4 Í{#”6 Í{%”7 Í{&”ÌE Í{4”ÌG Í{6”ÌK Í{:”ÌL Í{;”ÌY Í{ÌH”ÌZ Í{ÌIÜ ” ÍV” ÍV” Í|”$ Í|”% Í|”' Í|”* Í|”, Í|”8 Í|'”9 Í|(”; Í|*”< Í|+”ÌM Í|<”ÌO Í|>”ÌS Í|ÌB”ÌT Í|ÌC”Ìa Í|ÌP”Ìb Í|ÌQ”Ìd Í|ÌS›” ÍV” ÍV” Í}”* Í}”+ Í}”, Í}”4 Í})”6 Í}+”> Í}9”Ì@ Í};”ÌB Í}=™” Í~”  Í~”! Í~”. Í~ ”1 Í~#”9 Í~+”: Í~,”? Í~;”Ì@ Í~<™” Í”  Í”! Í”/ Í!”2 Í$”: Í,”; Í-”ÌA Í=”ÌB Í>’” Í€” Í€—” ÍV” ÍV” Í”% Í”& Í”) Í”+ Í–” Í‚”  Í‚”! Í‚”, Í‚”. Í‚ ”/ Í‚!’” Íƒ” Íƒ’” ÍW” ÍW–” ÍW” ÍW” ÍX”$ ÍX”% ÍX”+ ÍX–” ÍW” ÍW” ÍY”% ÍY”& ÍY”, ÍY–” ÍW” ÍW” ÍZ”. ÍZ ”/ ÍZ!”ÌJ ÍZ<–” ÍW” ÍW” Í[”+ Í[”, Í[”. Í[ ” ÍW” ÍW” Í\”% Í\”& Í\”( Í\”- Í\”/ Í\!”0 Í\"”2 Í\$”7 Í\)”9 Í\+”ÌQ Í\ÌC”ÌS Í\ÌE’” ÍW” ÍW’” Í^” Í^’”  Í_”% Í_š”  Í_”% Í_”& Íq”+ Íq”, Íq”2 Íq”3 Íq”9 Íq$”< Íq'”= Íq(š”  Í_”% Í_”& Ír”, Ír”- Ír”3 Ír”4 Ír”: Ír%”= Ír(”> Ír)Ü ”  Í_”% Í_”& Ís”. Ís”/ Ís”1 Ís”2 Ís”4 Ís”: Ís%”; Ís&”< Ís'”? Ís*”ÌE Ís0”ÌF Ís1”ÌL Ís7”ÌN Ís9”ÌO Ís:”ÌQ Ís<”ÌW ÍsÌB”ÌX ÍsÌC”ÌY ÍsÌD”Ì\ ÍsÌG”Ìb ÍsÌM”Ìc ÍsÌN”Ìi ÍsÌT”Ìk ÍsÌV˜”  Í_”% Í_”& Ít”- Ít”. Ít”4 Ít”5 Ít ”< Ít'—”  Í_”% Í_”& Íu”- Íu”. Íu”1 Íu”3 Íu˜”$ Ív”( Ív”) Ív”2 Ív ”3 Ív!”9 Ív'”: Ív(”; Ív)’”  Íw”! Íw’”  Í`”& Í`š”  Í`”& Í`”' Ía”, Ía”- Ía”3 Ía!”4 Ía"”: Ía(”= Ía+”> Ía,š”  Í`”& Í`”' Íb”- Íb”. Íb”4 Íb"”5 Íb#”; Íb)”> Íb,”? Íb-–”  Í`”& Í`”' Íc”+ Íc”, Íc”ÌG Íc5’”  Íd”& Ídš”  Íd”& Íd”' Íe”, Íe”- Íe”3 Íe!”4 Íe"”: Íe(”= Íe+”Ì@ Íe.š”  Íd”& Íd”' Íf”- Íf”. Íf”4 Íf"”5 Íf#”; Íf)”> Íf,”ÌA Íf/–”  Íd”& Íd”' Íg”+ Íg”, Íg”ÌG Íg5’”  Íh”& Íhš”  Íh”& Íh”' Íi”, Íi”- Íi”3 Íi!”4 Íi"”: Íi(”= Íi+”Ì@ Íi.š”  Íh”& Íh”' Íj”- Íj”. Íj”4 Íj"”5 Íj#”; Íj)”> Íj,”ÌA Íj/–”  Íh”& Íh”' Ík”+ Ík”, Ík”5 Ík#’”  Íl”& Ílš”  Íl”& Íl”' Ím”, Ím”- Ím”3 Ím!”4 Ím"”: Ím(”= Ím+”ÌA Ím/š”  Íl”& Íl”' Ín”- Ín”. Ín”4 Ín"”5 Ín#”; Ín)”> Ín,”ÌB Ín0–”  Íl”& Íl”' Ío”+ Ío”, Ío”5 Ío#’” Í_”! Í_Ü ”; Í^”? Í^”Ì@ Í^”ÌG Í^"”Ìa Íx”Ìb Íx”Ìh Íx ”Ìj Íx"”Ìl Íx$”Ìm Íx%”Ìs Íx+”Ìt Íx,”Ìv Íx.”Ìw Íx/”Ì Íx7”Ì Íx9’” Í^” Í^’” ÍV” ÍV’” Í
+” Í‘” Í‡	‘” Í‡	’” Í˜” Í˜’” Í’” Í’’” Í“” Í“˜” Í“” Í“” Í””  Í””! Í””$ Í””% Í””) Í”˜” Í“” Í“” Í•”! Í•”" Í•”% Í•”& Í•”* Í•š” Í“” Í“” Í–” Í–”  Í–”7 Í–'”: Í–*”; Í–+”ÌB Í–2”ÌE Í–5Ü ” Í“” Í“” Í—”# Í—”$ Í—”& Í—”' Í—”) Í—”, Í—”/ Í—”0 Í— ”1 Í—!”4 Í—$”6 Í—&”7 Í—'”9 Í—)”< Í—,”? Í—/”Ì@ Í—0”ÌA Í—1”ÌD Í—4”ÌF Í—6Ü ”/ Í’”3 Í’”4 Í’”8 Í’”ÌR Í˜	”ÌS Í˜
+”ÌV Í˜”ÌX Í˜”ÌZ Í˜”Ì[ Í˜”Ì^ Í˜"”Ì_ Í˜#”Ìa Í˜%”Ìb Í˜&”Ìj Í˜.”Ìl Í˜0’” Í’” Í’–” Íš” Íš
+” Íš” Íš” Íš”! Íš’” Í›” Í›Ÿ” Í›” Í›” Í	”$ Í”% Í”3 Í”4 Í”6 Í ”7 Í!”ÌI Í3”ÌK Í5”ÌO Í9”ÌP Í:”Ì] ÍÌG”Ì^ ÍÌHŸ” Í›” Í›” Í	”& Í”' Í”3 Í”4 Í”6 Í ”7 Í!”ÌK Í5”ÌM Í7”ÌQ Í;”ÌR Í<”Ì_ ÍÌI”Ì` ÍÌJ–” Í›” Í›” Í	”. Í”/ Í”ÌG Í1–” Í›” Í›” Í	”+ Í”, Í”. Í” Í›” Í›” Í	”% Í”& Í”( Í”- Í”/ Í”0 Í”2 Í”7 Í!”9 Í#”ÌP Í:”ÌR Í<˜” Í›” Í›” Í	”) Í”* Í”9 Í#”: Í$”Ì@ Í*˜” Í›” Í›” Í	”- Í”. Í”7 Í!”8 Í"”> Í(Ü ” Í›” Í›” Í 	”% Í ”& Í ”( Í ”. Í ”0 Í ”2 Í ”4 Í ”9 Í #”; Í %”ÌL Í 6”ÌN Í 8”ÌU Í ?”ÌW Í ÌA”ÌX Í ÌB”ÌZ Í ÌD”Ìa Í ÌK”Ìc Í ÌM”Ìe Í ÌO”Ìg Í ÌQ”” Íœ
+” Íœ”$ Íœ”+ ÍœŸ” Íœ
+” Íœ” Í”% Í”& Í”2 Í"”3 Í#”5 Í%”6 Í&”ÌK Í;”ÌM Í=”ÌQ ÍÌA”ÌR ÍÌB”Ì_ ÍÌO”Ì` ÍÌP–” Íœ
+” Íœ” Í”& Í”' Í”0 Í ˜” Íœ
+” Íœ” ÍŸ”' ÍŸ”( ÍŸ”2 ÍŸ"”3 ÍŸ#”7 ÍŸ'–” Íœ
+” Íœ” Í ”" Í ”# Í ”) Í ˜” Íœ
+” Íœ” Í¡”& Í¡”' Í¡”0 Í¡ ”1 Í¡!”7 Í¡'’” Íœ
+” Íœ˜” Í£
+” Í£”$ Í£”' Í£”+ Í£”, Í£”1 Í£”3 Í£Ü ” Í£
+” Í£” Í¤”% Í¤”& Í¤”* Í¤”+ Í¤”8 Í¤(”9 Í¤)”: Í¤*”; Í¤+”= Í¤-”> Í¤.”? Í¤/”Ì@ Í¤0”ÌB Í¤2–” Í£
+” Í£” Í¥”& Í¥”' Í¥”0 Í¥ ˜” Í£
+” Í£” Í¦”' Í¦”( Í¦”2 Í¦"”3 Í¦#”7 Í¦'–” Í£
+” Í£” Í§”" Í§”# Í§”) Í§˜” Í£
+” Í£” Í¨”& Í¨”' Í¨”0 Í¨ ”1 Í¨!”7 Í¨'š” Í£
+” Í£” Í©”# Í©”$ Í©”& Í©”) Í©”+ Í©”, Í©”. Í©’” Í£
+” Í£”” Í«
+” Í«”$ Í«”* Í«Ü ” Í«
+” Í«” Í¬”% Í¬”& Í¬”* Í¬”+ Í¬”8 Í¬(”9 Í¬)”: Í¬*”; Í¬+”= Í¬-”> Í¬.”? Í¬/”Ì@ Í¬0”ÌB Í¬2–” Í«
+” Í«” Í­”& Í­”' Í­”> Í­.–” Í«
+” Í«” Í®”" Í®”# Í®”) Í®˜” Í«
+” Í«” Í¯”& Í¯”' Í¯”0 Í¯ ”1 Í¯!”7 Í¯'’” Í«
+” Í«’” Í±
+” Í±–” Í±
+” Í±” ÍÖ”! ÍÖ”" ÍÖ”( ÍÖš” Í±
+” Í±” Í×”" Í×”# Í×”% Í×”( Í×”* Í×”, Í×”. Í×” Í±
+” Í±” ÍØ”# ÍØ”$ ÍØ”& ÍØ”) ÍØ”+ ÍØ”- ÍØ”/ ÍØ”5 ÍØ$”7 ÍØ&”9 ÍØ(”; ÍØ*–” Í±
+” Í±” ÍÙ”+ ÍÙ”, ÍÙ”ÌD ÍÙ3–” Í±
+” Í±” ÍÚ”( ÍÚ”) ÍÚ”+ ÍÚ’” Í²” Í²–” Í²” Í²” Í»”+ Í»”, Í»”- Í»˜” Í²” Í²” Í¼”) Í¼”* Í¼”9 Í¼'”: Í¼(”Ì@ Í¼.˜” Í³” Í³”$ Í³”' Í³”+ Í³”, Í³”4 Í³#”6 Í³%Ü ” Í³” Í³” Í´”% Í´”& Í´”* Í´”+ Í´”8 Í´,”9 Í´-”: Í´.”; Í´/”= Í´1”> Í´2”? Í´3”Ì@ Í´4”ÌB Í´6–” Í³” Í³” Íµ”& Íµ”' Íµ”0 Íµ$˜” Í³” Í³” Í¶”' Í¶”( Í¶”2 Í¶&”3 Í¶'”7 Í¶+’” Í³” Í³”” Í·” Í·”$ Í·”( Í·Ü ” Í·” Í·” Í¸”% Í¸”& Í¸”* Í¸”+ Í¸”8 Í¸,”9 Í¸-”: Í¸.”; Í¸/”= Í¸1”> Í¸2”? Í¸3”Ì@ Í¸4”ÌB Í¸6–” Í·” Í·” Í¹”& Í¹”' Í¹”> Í¹2’” Í·” Í·’” Í²” Í²’” Í¾” Í¾–” Í¾” Í¾” ÍÇ”+ ÍÇ”, ÍÇ”- ÍÇ˜” Í¾” Í¾” ÍÈ”) ÍÈ”* ÍÈ”9 ÍÈ'”: ÍÈ(”Ì@ ÍÈ.˜” Í¿” Í¿”$ Í¿”' Í¿”+ Í¿”, Í¿”5 Í¿$”7 Í¿&Ü ” Í¿” Í¿” ÍÀ”% ÍÀ”& ÍÀ”* ÍÀ”+ ÍÀ”8 ÍÀ,”9 ÍÀ-”: ÍÀ.”; ÍÀ/”= ÍÀ1”> ÍÀ2”? ÍÀ3”Ì@ ÍÀ4”ÌB ÍÀ6–” Í¿” Í¿” ÍÁ”& ÍÁ”' ÍÁ”0 ÍÁ$˜” Í¿” Í¿” ÍÂ”' ÍÂ”( ÍÂ”2 ÍÂ&”3 ÍÂ'”7 ÍÂ+’” Í¿” Í¿”” ÍÃ” ÍÃ”$ ÍÃ”( ÍÃÜ ” ÍÃ” ÍÃ” ÍÄ”% ÍÄ”& ÍÄ”* ÍÄ”+ ÍÄ”8 ÍÄ,”9 ÍÄ-”: ÍÄ.”; ÍÄ/”= ÍÄ1”> ÍÄ2”? ÍÄ3”Ì@ ÍÄ4”ÌB ÍÄ6–” ÍÃ” ÍÃ” ÍÅ”& ÍÅ”' ÍÅ”> ÍÅ2’” ÍÃ” ÍÃ’” Í¾” Í¾’” ÍÊ” ÍÊ–” ÍÊ” ÍÊ” ÍÓ”+ ÍÓ”, ÍÓ”- ÍÓ˜” ÍÊ” ÍÊ” ÍÔ”) ÍÔ”* ÍÔ”9 ÍÔ'”: ÍÔ(”Ì@ ÍÔ.™” ÍË” ÍË”$ ÍË”' ÍË”+ ÍË”, ÍË”7 ÍË&”9 ÍË(”< ÍË+Ü ” ÍË” ÍË” ÍÌ”% ÍÌ”& ÍÌ”* ÍÌ”+ ÍÌ”8 ÍÌ,”9 ÍÌ-”: ÍÌ.”; ÍÌ/”= ÍÌ1”> ÍÌ2”? ÍÌ3”Ì@ ÍÌ4”ÌB ÍÌ6–” ÍË” ÍË” ÍÍ”& ÍÍ”' ÍÍ”0 ÍÍ$˜” ÍË” ÍË” ÍÎ”' ÍÎ”( ÍÎ”2 ÍÎ&”3 ÍÎ'”7 ÍÎ+’” ÍË” ÍË”” ÍÏ” ÍÏ”$ ÍÏ”) ÍÏÜ ” ÍÏ” ÍÏ” ÍĞ”% ÍĞ”& ÍĞ”* ÍĞ”+ ÍĞ”8 ÍĞ,”9 ÍĞ-”: ÍĞ.”; ÍĞ/”= ÍĞ1”> ÍĞ2”? ÍĞ3”Ì@ ÍĞ4”ÌB ÍĞ6–” ÍÏ” ÍÏ” ÍÑ”& ÍÑ”' ÍÑ”> ÍÑ2’” ÍÏ” ÍÏ’” ÍÊ” ÍÊ’” Í±
+” Í±’” ÍÜ
+” ÍÜ–” ÍÜ
+” ÍÜ” Íõ”! Íõ”" Íõ”( Íõš” ÍÜ
+” ÍÜ” Íö”" Íö”# Íö”% Íö”( Íö”* Íö”, Íö”. Íö” ÍÜ
+” ÍÜ” Í÷”# Í÷”$ Í÷”& Í÷”) Í÷”+ Í÷”- Í÷”/ Í÷”5 Í÷$”7 Í÷&”9 Í÷(”; Í÷*–” ÍÜ
+” ÍÜ” Íø”+ Íø”, Íø”ÌD Íø3–” ÍÜ
+” ÍÜ” Íù”( Íù”) Íù”+ Íù’” Íİ” Íİ–” Íİ” Íİ” Íæ”+ Íæ”, Íæ”- Íæ˜” Íİ” Íİ” Íç”) Íç”* Íç”9 Íç'”: Íç(”Ì@ Íç.˜” ÍŞ” ÍŞ”$ ÍŞ”( ÍŞ”, ÍŞ”- ÍŞ”5 ÍŞ$”7 ÍŞ&Ü ” ÍŞ” ÍŞ” Íß”% Íß”& Íß”* Íß”+ Íß”8 Íß,”9 Íß-”: Íß.”; Íß/”= Íß1”> Íß2”? Íß3”Ì@ Íß4”ÌB Íß6–” ÍŞ” ÍŞ” Íà”& Íà”' Íà”0 Íà$˜” ÍŞ” ÍŞ” Íá”' Íá”( Íá”2 Íá&”3 Íá'”7 Íá+’” ÍŞ” ÍŞ”” Íâ” Íâ”$ Íâ”* ÍâÜ ” Íâ” Íâ” Íã”% Íã”& Íã”* Íã”+ Íã”8 Íã,”9 Íã-”: Íã.”; Íã/”= Íã1”> Íã2”? Íã3”Ì@ Íã4”ÌB Íã6–” Íâ” Íâ” Íä”& Íä”' Íä”> Íä2’” Íâ” Íâ’” Íİ” Íİ’” Íé” Íé–” Íé” Íé” Íò”+ Íò”, Íò”- Íò˜” Íé” Íé” Íó”) Íó”* Íó”9 Íó'”: Íó(”Ì@ Íó.™” Íê” Íê”$ Íê”' Íê”+ Íê”, Íê”< Íê+”> Íê-”ÌB Íê1Ü ” Íê” Íê” Íë”% Íë”& Íë”* Íë”+ Íë”8 Íë,”9 Íë-”: Íë.”; Íë/”= Íë1”> Íë2”? Íë3”Ì@ Íë4”ÌB Íë6–” Íê” Íê” Íì”& Íì”' Íì”0 Íì$˜” Íê” Íê” Íí”' Íí”( Íí”2 Íí&”3 Íí'”7 Íí+’” Íê” Íê”” Íî” Íî”$ Íî”* ÍîÜ ” Íî” Íî” Íï”% Íï”& Íï”* Íï”+ Íï”8 Íï,”9 Íï-”: Íï.”; Íï/”= Íï1”> Íï2”? Íï3”Ì@ Íï4”ÌB Íï6–” Íî” Íî” Íğ”& Íğ”' Íğ”> Íğ2’” Íî” Íî’” Íé” Íé’” ÍÜ
+” ÍÜ’” Íû
+” Íûš” Íû
+” Íû” Í”% Í”& Í”( Í”+ Í”- Í”/ Í”1 Í˜” Íû
+” Íû” Í”) Í”* Í”9 Í%”: Í&”Ì@ Í,”” Íü” Íü”/ Íü”5 ÍüŸ” Íü” Íü” Íı”$ Íı”% Íı”1 Íı!”2 Íı"”4 Íı$”5 Íı%”ÌH Íı8”ÌJ Íı:”ÌN Íı>”ÌO Íı?”Ì\ ÍıÌL”Ì] ÍıÌMŸ” Íü” Íü” Íş”% Íş”& Íş”2 Íş"”3 Íş#”5 Íş%”6 Íş&”ÌJ Íş:”ÌL Íş<”ÌP ÍşÌ@”ÌQ ÍşÌA”Ì^ ÍşÌN”Ì_ ÍşÌOŸ” Íü” Íü” Íÿ”' Íÿ”( Íÿ”4 Íÿ$”5 Íÿ%”7 Íÿ'”8 Íÿ(”ÌN Íÿ>”ÌP ÍÿÌ@”ÌT ÍÿÌD”ÌU ÍÿÌE”Ìb ÍÿÌR”Ìc ÍÿÌS–” Íü” Íü” Í ”. Í ”/ Í ”8 Í (–” Íü” Íü” Í”+ Í”, Í”. ÍÜ ” Íü” Íü” Í”% Í”& Í”( Í”. Í”0 Í ”1 Í!”3 Í#”8 Í(”: Í*”ÌP ÍÌ@”ÌR ÍÌB”ÌY ÍÌI”Ì[ ÍÌK”Ì\ ÍÌL”Ì^ ÍÌN”Ìe ÍÌU”Ìg ÍÌW”Ìh ÍÌX”Ìj ÍÌZ—” Íü” Íü” Í”& Í”' Í”* Í”, Í–” Í”  Í”! Í”) Í”+ Í”, Í —” Í”  Í”! Í”+ Í”. Í"”3 Í'”4 Í(—” Í”  Í”! Í”. Í"”1 Í%”6 Í*”7 Í+—” Í”  Í”! Í”0 Í$”3 Í'”7 Í+”8 Í,’” Í” Í’” Íü” Íü”” Í
+” Í
+”/ Í
+”5 Í
+Ÿ” Í
+” Í
+” Í”$ Í”% Í”1 Í!”2 Í"”4 Í$”5 Í%”ÌH Í8”ÌJ Í:”ÌN Í>”ÌO Í?”Ì\ ÍÌL”Ì] ÍÌMŸ” Í
+” Í
+” Í”% Í”& Í”2 Í"”3 Í#”5 Í%”6 Í&”ÌJ Í:”ÌL Í<”ÌP ÍÌ@”ÌQ ÍÌA”Ì^ ÍÌN”Ì_ ÍÌOŸ” Í
+” Í
+” Í”' Í”( Í”4 Í$”5 Í%”7 Í'”8 Í(”ÌN Í>”ÌP ÍÌ@”ÌT ÍÌD”ÌU ÍÌE”Ìb ÍÌR”Ìc ÍÌS–” Í
+” Í
+” Í”. Í”/ Í”8 Í(–” Í
+” Í
+” Í”+ Í”, Í”. ÍÜ ” Í
+” Í
+” Í”% Í”& Í”( Í”. Í”0 Í ”1 Í!”3 Í#”8 Í(”: Í*”ÌQ ÍÌA”ÌS ÍÌC”ÌZ ÍÌJ”Ì\ ÍÌL”Ì] ÍÌM”Ì_ ÍÌO”Ìf ÍÌV”Ìh ÍÌX”Ìi ÍÌY”Ìk ÍÌ[š” Í
+” Í
+” Í”% Í”& Í”( Í”+ Í”- Í”/ Í”1 Í!—” Í
+” Í
+” Í”& Í”' Í”* Í”, Í–” Í”" Í”# Í”' Í”) Í”* Í’” Í” Í’” Í
+” Í
+’” Íû
+” Íû’” Í›” Í›‘” Í!‘” Í!’” Í—” Í—	‘” Í&””  Í) ” Í)” Í)” Í)”” Í*” Í*	” Í*” Í*’”  Í+ ” Í+””  Í- ” Í-” Í-”  Í- •” Í.” Í.” Í.” Í.” Í.’”  Í/ ” Í/ÔrH–§version¤file§sources®sourcesContent¥names¨mappingsÀ‘À‘ÀÜ;‘”    ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”  	 ‘”  
  ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”    ‘”  ! ‘”  " ‘”  # ‘”  $ ‘”  % ‘”  & ‘”  ' ‘”  ( ‘”  ) ‘”  * ‘”  + ‘”  , ‘”  - ‘”  . ‘”  / ‘”  0 ‘”  1 ‘”  2 ‘”  3 ‘”  4 ‘”  5 ‘”  6 ‘”  7 ‘”  8 ‘”  9 ‘”  : ‘”  ; ‘”  < ‘”  = ‘”  > ‘”  ? ‘”  Ì@ ‘”  ÌA ‘”  ÌB ‘”  ÌC ‘”  ÌD ‘”  ÌE ‘”  ÌF ‘”  ÌG ‘”  ÌH ‘”  ÌI ‘”  ÌJ ‘”  ÌK ‘”  ÌL ‘”  ÌM ‘”  ÌN ‘”  ÌO ‘”  ÌP ‘”  ÌQ ‘”  ÌR ‘”  ÌS ‘”  ÌT ‘”  ÌU ‘”  ÌV ‘”  ÌW ‘”  ÌX ‘”  ÌY ‘”  ÌZ ‘”  Ì[ ‘”  Ì\ ‘”  Ì] ‘”  Ì^ ‘”  Ì_ ‘”  Ì` ‘”  Ìa ‘”  Ìb ‘”  Ìc ‘”  Ìd ‘”  Ìe ‘”  Ìf ‘”  Ìg ‘”  Ìh ‘”  Ìi ‘”  Ìj ‘”  Ìk ‘”  Ìl ‘”  Ìm ‘”  Ìn ‘”  Ìo ‘”  Ìp ‘”  Ìq ‘”  Ìr ‘”  Ìs ‘”  Ìt ‘”  Ìu ‘”  Ìv ‘”  Ìw ‘”  Ìx ‘”  Ìy ‘”  Ìz ‘”  Ì{ ‘”  Ì| ‘”  Ì} ‘”  Ì~ ‘”  Ì ‘”  Ì€ ‘”  Ì ‘”  Ì‚ ‘”  Ìƒ ‘”  Ì„ ‘”  Ì… ‘”  Ì† ‘”  Ì‡ ‘”  Ìˆ ‘”  Ì‰ ‘”  ÌŠ ‘”  Ì‹ ‘”  ÌŒ ‘”  Ì ‘”  Ì ‘”  Ì ‘”  Ì ‘”  Ì‘ ‘”  Ì’ ‘”  Ì“ ‘”  Ì” ‘”  Ì• ‘”  Ì– ‘”  Ì— ‘”  Ì˜ ‘”  Ì™ ‘”  Ìš ‘”  Ì› ‘”  Ìœ ‘”  Ì ‘”  Ì ‘”  ÌŸ ‘”  Ì  ‘”  Ì¡ ‘”  Ì¢ ‘”  Ì£ ‘”  Ì¤ ‘”  Ì¥ ‘”  Ì¦ ‘”  Ì§ ‘”  Ì¨ ‘”  Ì© ‘”  Ìª ‘”  Ì« ‘”  Ì¬ ‘”  Ì­ ‘”  Ì® ‘”  Ì¯ ‘”  Ì° ‘”  Ì± ‘”  Ì² ‘”  Ì³ ‘”  Ì´ ‘”  Ìµ ‘”  Ì¶ ‘”  Ì· ‘”  Ì¸ ‘”  Ì¹ ‘”  Ìº ‘”  Ì» ‘”  Ì¼ ‘”  Ì½ ‘”  Ì¾ ‘”  Ì¿ ‘”  ÌÀ ‘”  ÌÁ ‘”  ÌÂ ‘”  ÌÃ ‘”  ÌÄ ‘”  ÌÅ ‘”  ÌÆ ‘”  ÌÇ ‘”  ÌÈ ‘”  ÌÉ ‘”  ÌÊ ‘”  ÌË ‘”  ÌÌ ‘”  ÌÍ ‘”  ÌÎ ‘”  ÌÏ ‘”  ÌĞ ‘”  ÌÑ ‘”  ÌÒ ‘”  ÌÓ ‘”  ÌÔ ‘”  ÌÕ ‘”  ÌÖ ‘”  Ì× ‘”  ÌØ ‘”  ÌÙ ‘”  ÌÚ ‘”  ÌÛ ‘”  ÌÜ ‘”  Ìİ ‘”  ÌŞ ‘”  Ìß ‘”  Ìà ‘”  Ìá ‘”  Ìâ ‘”  Ìã ‘”  Ìä ‘”  Ìå ‘”  Ìæ ‘”  Ìç ‘”  Ìè ‘”  Ìé ‘”  Ìê ‘”  Ìë ‘”  Ìì ‘”  Ìí ‘”  Ìî ‘”  Ìï ‘”  Ìğ ‘”  Ìñ ‘”  Ìò ‘”  Ìó ‘”  Ìô ‘”  Ìõ ‘”  Ìö ‘”  Ì÷ ‘”  Ìø ‘”  Ìù ‘”  Ìú ‘”  Ìû ‘”  Ìü ‘”  Ìı ‘”  Ìş ‘”  Ìÿ ‘”  Í  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í	 ‘”  Í
  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ‘”  Í; ‘”  Í< ‘”  Í= ‘”  Í> ‘”  Í? ‘”  Í@ ‘”  ÍA ‘”  ÍB ‘”  ÍC ‘”  ÍD ‘”  ÍE ‘”  ÍF ‘”  ÍG ‘”  ÍH ‘”  ÍI ‘”  ÍJ ‘”  ÍK ‘”  ÍL ‘”  ÍM ‘”  ÍN ‘”  ÍO ‘”  ÍP ‘”  ÍQ ‘”  ÍR ‘”  ÍS ‘”  ÍT ‘”  ÍU ‘”  ÍV ‘”  ÍW ‘”  ÍX ‘”  ÍY ‘”  ÍZ ‘”  Í[ ‘”  Í\ ‘”  Í] ‘”  Í^ ‘”  Í_ ‘”  Í` ‘”  Ía ‘”  Íb ‘”  Íc ‘”  Íd ‘”  Íe ‘”  Íf ‘”  Íg ‘”  Íh ‘”  Íi ‘”  Íj ‘”  Ík ‘”  Íl ‘”  Ím ‘”  Ín ‘”  Ío ‘”  Íp ‘”  Íq ‘”  Ír ‘”  Ís ‘”  Ít ‘”  Íu ‘”  Ív ‘”  Íw ‘”  Íx ‘”  Íy ‘”  Íz ‘”  Í{ ‘”  Í| ‘”  Í} ‘”  Í~ ‘”  Í ‘”  Í€ ‘”  Í ‘”  Í‚ ‘”  Íƒ ‘”  Í„ ‘”  Í… ‘”  Í† ‘”  Í‡ ‘”  Íˆ ‘”  Í‰ ‘”  ÍŠ ‘”  Í‹ ‘”  ÍŒ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í‘ ‘”  Í’ ‘”  Í“ ‘”  Í” ‘”  Í• ‘”  Í– ‘”  Í— ‘”  Í˜ ‘”  Í™ ‘”  Íš ‘”  Í› ‘”  Íœ ‘”  Í ‘”  Í ‘”  ÍŸ ‘”  Í  ‘”  Í¡ ‘”  Í¢ ‘”  Í£ ‘”  Í¤ ‘”  Í¥ ‘”  Í¦ ‘”  Í§ ‘”  Í¨ ‘”  Í© ‘”  Íª ‘”  Í« ‘”  Í¬ ‘”  Í­ ‘”  Í® ‘”  Í¯ ‘”  Í° ‘”  Í± ‘”  Í² ‘”  Í³ ‘”  Í´ ‘”  Íµ ‘”  Í¶ ‘”  Í· ‘”  Í¸ ‘”  Í¹ ‘”  Íº ‘”  Í» ‘”  Í¼ ‘”  Í½ ‘”  Í¾ ‘”  Í¿ ‘”  ÍÀ ‘”  ÍÁ ‘”  ÍÂ ‘”  ÍÃ ‘”  ÍÄ ‘”  ÍÅ ‘”  ÍÆ ‘”  ÍÇ ‘”  ÍÈ ‘”  ÍÉ ‘”  ÍÊ ‘”  ÍË ‘”  ÍÌ ‘”  ÍÍ ‘”  ÍÎ ‘”  ÍÏ ‘”  ÍĞ ‘”  ÍÑ ‘”  ÍÒ ‘”  ÍÓ ‘”  ÍÔ ‘”  ÍÕ ‘”  ÍÖ ‘”  Í× ‘”  ÍØ ‘”  ÍÙ ‘”  ÍÚ ‘”  ÍÛ ‘”  ÍÜ ‘”  Íİ ‘”  ÍŞ ‘”  Íß ‘”  Íà ‘”  Íá ‘”  Íâ ‘”  Íã ‘”  Íä ‘”  Íå ‘”  Íæ ‘”  Íç ‘”  Íè ‘”  Íé ‘”  Íê ‘”  Íë ‘”  Íì ‘”  Íí ‘”  Íî ‘”  Íï ‘”  Íğ ‘”  Íñ ‘”  Íò ‘”  Íó ‘”  Íô ‘”  Íõ ‘”  Íö ‘”  Í÷ ‘”  Íø ‘”  Íù ‘”  Íú ‘”  Íû ‘”  Íü ‘”  Íı ‘”  Íş ‘”  Íÿ ‘”  Í  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í	 ‘”  Í
- ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ‘”  Í; ‘”  Í< ‘”  Í= ‘”  Í> ‘”  Í? ‘”  Í@ ‘”  ÍA ‘”  ÍB ‘”  ÍC ‘”  ÍD ‘”  ÍE ‘”  ÍF ‘”  ÍG ‘”  ÍH ‘”  ÍI ‘”  ÍJ ‘”  ÍK ‘”  ÍL ‘”  ÍM ‘”  ÍN ‘”  ÍO ‘”  ÍP ‘”  ÍQ ‘”  ÍR ‘”  ÍS ‘”  ÍT ‘”  ÍU ‘”  ÍV ‘”  ÍW ‘”  ÍX ‘”  ÍY ‘”  ÍZ ‘”  Í[ ‘”  Í\ ‘”  Í] ‘”  Í^ ‘”  Í_ ‘”  Í` ‘”  Ía ‘”  Íb ‘”  Íc ‘”  Íd ‘”  Íe ‘”  Íf ‘”  Íg ‘”  Íh ‘”  Íi ‘”  Íj ‘”  Ík ‘”  Íl ‘”  Ím ‘”  Ín ‘”  Ío ‘”  Íp ‘”  Íq ‘”  Ír ‘”  Ís ‘”  Ít ‘”  Íu ‘”  Ív ‘”  Íw ‘”  Íx ‘”  Íy ‘”  Íz ‘”  Í{ ‘”  Í| ‘”  Í} ‘”  Í~ ‘”  Í ‘”  Í€ ‘”  Í ‘”  Í‚ ‘”  Íƒ ‘”  Í„ ‘”  Í… ‘”  Í† ‘”  Í‡ ‘”  Íˆ ‘”  Í‰ ‘”  ÍŠ ‘”  Í‹ ‘”  ÍŒ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í‘ ‘”  Í’ ‘”  Í“ ‘”  Í” ‘”  Í• ‘”  Í– ‘”  Í— ‘”  Í˜ ‘”  Í™ ‘”  Íš ‘”  Í› ‘”  Íœ ‘”  Í ‘”  Í ‘”  ÍŸ ‘”  Í  ‘”  Í¡ ‘”  Í¢ ÔrI’§missing¦pluginÃ¦genAbcÂÔ  ÔrJ”²dynamicImportCache¹exportAllDeclarationCache»exportNamedDeclarationCache«importCache’ÔrK–¤type¥start£end«declarationªspecifiers¦source¶ExportNamedDeclarationÍrÍrXÔrL™¤type¥start£end¢idªexpression©generator¥async¦params¤body³FunctionDeclarationÍr!ÍrXÔrM”¤type¥start£end¤nameªIdentifierÍr*Ír8®getGameRecordsÂÂÂÔrN”¤type¥start£end¤body®BlockStatementÍr;ÍrX‘ÔrO”¤type¥start£end¨argument¯ReturnStatementÍrBÍrUMªIdentifierÍrIÍrT«gameRecordsÀK¶ExportNamedDeclarationÍrhÍr¦L³FunctionDeclarationÍroÍr¦MªIdentifierÍrxÍrˆ°clearGameRecordsÂÂÂN®BlockStatementÍr‹Ír¦‘ÔrP”¤type¥start£endªexpression³ExpressionStatementÍr’Ír£ÔrQ–¤type¥start£end¨operator¤left¥right´AssignmentExpressionÍr’Ír¢¡=MªIdentifierÍr’Ír«gameRecordsÔrR”¤type¥start£end¨elements¯ArrayExpressionÍr Ír¢À‘ÔrS•¤type¥start£endªspecifiers¦source±ImportDeclarationÌ€Ì¢‘ÔrT”¤type¥start£end¥local¶ImportDefaultSpecifierÌ‡ÌMªIdentifierÌ‡Ì¦routerÔrU•¤type¥start£end¥value£raw§LiteralÌ“Ì¡¬@ohos.router®'@ohos.router'
+ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ‘”  Í; ‘”  Í< ‘”  Í= ‘”  Í> ‘”  Í? ‘”  Í@ ‘”  ÍA ‘”  ÍB ‘”  ÍC ‘”  ÍD ‘”  ÍE ‘”  ÍF ‘”  ÍG ‘”  ÍH ‘”  ÍI ‘”  ÍJ ‘”  ÍK ‘”  ÍL ‘”  ÍM ‘”  ÍN ‘”  ÍO ‘”  ÍP ‘”  ÍQ ‘”  ÍR ‘”  ÍS ‘”  ÍT ‘”  ÍU ‘”  ÍV ‘”  ÍW ‘”  ÍX ‘”  ÍY ‘”  ÍZ ‘”  Í[ ‘”  Í\ ‘”  Í] ‘”  Í^ ‘”  Í_ ‘”  Í` ‘”  Ía ‘”  Íb ‘”  Íc ‘”  Íd ‘”  Íe ‘”  Íf ‘”  Íg ‘”  Íh ‘”  Íi ‘”  Íj ‘”  Ík ‘”  Íl ‘”  Ím ‘”  Ín ‘”  Ío ‘”  Íp ‘”  Íq ‘”  Ír ‘”  Ís ‘”  Ít ‘”  Íu ‘”  Ív ‘”  Íw ‘”  Íx ‘”  Íy ‘”  Íz ‘”  Í{ ‘”  Í| ‘”  Í} ‘”  Í~ ‘”  Í ‘”  Í€ ‘”  Í ‘”  Í‚ ‘”  Íƒ ‘”  Í„ ‘”  Í… ‘”  Í† ‘”  Í‡ ‘”  Íˆ ‘”  Í‰ ‘”  ÍŠ ‘”  Í‹ ‘”  ÍŒ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í‘ ‘”  Í’ ‘”  Í“ ‘”  Í” ‘”  Í• ‘”  Í– ‘”  Í— ‘”  Í˜ ‘”  Í™ ‘”  Íš ‘”  Í› ‘”  Íœ ‘”  Í ‘”  Í ‘”  ÍŸ ‘”  Í  ‘”  Í¡ ‘”  Í¢ ‘”  Í£ ‘”  Í¤ ‘”  Í¥ ‘”  Í¦ ‘”  Í§ ‘”  Í¨ ‘”  Í© ‘”  Íª ‘”  Í« ‘”  Í¬ ‘”  Í­ ‘”  Í® ‘”  Í¯ ‘”  Í° ‘”  Í± ‘”  Í² ‘”  Í³ ‘”  Í´ ‘”  Íµ ‘”  Í¶ ‘”  Í· ‘”  Í¸ ‘”  Í¹ ‘”  Íº ‘”  Í» ‘”  Í¼ ‘”  Í½ ‘”  Í¾ ‘”  Í¿ ‘”  ÍÀ ‘”  ÍÁ ‘”  ÍÂ ‘”  ÍÃ ‘”  ÍÄ ‘”  ÍÅ ‘”  ÍÆ ‘”  ÍÇ ‘”  ÍÈ ‘”  ÍÉ ‘”  ÍÊ ‘”  ÍË ‘”  ÍÌ ‘”  ÍÍ ‘”  ÍÎ ‘”  ÍÏ ‘”  ÍĞ ‘”  ÍÑ ‘”  ÍÒ ‘”  ÍÓ ‘”  ÍÔ ‘”  ÍÕ ‘”  ÍÖ ‘”  Í× ‘”  ÍØ ‘”  ÍÙ ‘”  ÍÚ ‘”  ÍÛ ‘”  ÍÜ ‘”  Íİ ‘”  ÍŞ ‘”  Íß ‘”  Íà ‘”  Íá ‘”  Íâ ‘”  Íã ‘”  Íä ‘”  Íå ‘”  Íæ ‘”  Íç ‘”  Íè ‘”  Íé ‘”  Íê ‘”  Íë ‘”  Íì ‘”  Íí ‘”  Íî ‘”  Íï ‘”  Íğ ‘”  Íñ ‘”  Íò ‘”  Íó ‘”  Íô ‘”  Íõ ‘”  Íö ‘”  Í÷ ‘”  Íø ‘”  Íù ‘”  Íú ‘”  Íû ‘”  Íü ‘”  Íı ‘”  Íş ‘”  Íÿ ‘”  Í  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í	 ‘”  Í
+ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ‘”  Í; ‘”  Í< ‘”  Í= ‘”  Í> ‘”  Í? ‘”  Í@ ‘”  ÍA ‘”  ÍB ‘”  ÍC ‘”  ÍD ‘”  ÍE ‘”  ÍF ‘”  ÍG ‘”  ÍH ‘”  ÍI ‘”  ÍJ ‘”  ÍK ‘”  ÍL ‘”  ÍM ‘”  ÍN ‘”  ÍO ‘”  ÍP ‘”  ÍQ ‘”  ÍR ‘”  ÍS ‘”  ÍT ‘”  ÍU ‘”  ÍV ‘”  ÍW ‘”  ÍX ‘”  ÍY ‘”  ÍZ ‘”  Í[ ‘”  Í\ ‘”  Í] ‘”  Í^ ‘”  Í_ ‘”  Í` ‘”  Ía ‘”  Íb ‘”  Íc ‘”  Íd ‘”  Íe ‘”  Íf ‘”  Íg ‘”  Íh ‘”  Íi ‘”  Íj ‘”  Ík ‘”  Íl ‘”  Ím ‘”  Ín ‘”  Ío ‘”  Íp ‘”  Íq ‘”  Ír ‘”  Ís ‘”  Ít ‘”  Íu ‘”  Ív ‘”  Íw ‘”  Íx ‘”  Íy ‘”  Íz ‘”  Í{ ‘”  Í| ‘”  Í} ‘”  Í~ ‘”  Í ‘”  Í€ ‘”  Í ‘”  Í‚ ‘”  Íƒ ‘”  Í„ ‘”  Í… ‘”  Í† ‘”  Í‡ ‘”  Íˆ ‘”  Í‰ ‘”  ÍŠ ‘”  Í‹ ‘”  ÍŒ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í‘ ‘”  Í’ ‘”  Í“ ‘”  Í” ‘”  Í• ‘”  Í– ‘”  Í— ‘”  Í˜ ‘”  Í™ ‘”  Íš ‘”  Í› ‘”  Íœ ‘”  Í ‘”  Í ‘”  ÍŸ ‘”  Í  ‘”  Í¡ ‘”  Í¢ ‘”  Í£ ‘”  Í¤ ‘”  Í¥ ‘”  Í¦ ‘”  Í§ ‘”  Í¨ ‘”  Í© ‘”  Íª ‘”  Í« ‘”  Í¬ ‘”  Í­ ‘”  Í® ‘”  Í¯ ‘”  Í° ‘”  Í± ‘”  Í² ‘”  Í³ ‘”  Í´ ‘”  Íµ ‘”  Í¶ ‘”  Í· ‘”  Í¸ ‘”  Í¹ ‘”  Íº ‘”  Í» ‘”  Í¼ ‘”  Í½ ‘”  Í¾ ‘”  Í¿ ‘”  ÍÀ ‘”  ÍÁ ‘”  ÍÂ ‘”  ÍÃ ‘”  ÍÄ ‘”  ÍÅ ‘”  ÍÆ ‘”  ÍÇ ‘”  ÍÈ ‘”  ÍÉ ‘”  ÍÊ ‘”  ÍË ‘”  ÍÌ ‘”  ÍÍ ‘”  ÍÎ ‘”  ÍÏ ‘”  ÍĞ ‘”  ÍÑ ‘”  ÍÒ ‘”  ÍÓ ‘”  ÍÔ ‘”  ÍÕ ‘”  ÍÖ ‘”  Í× ‘”  ÍØ ‘”  ÍÙ ‘”  ÍÚ ‘”  ÍÛ ‘”  ÍÜ ‘”  Íİ ‘”  ÍŞ ‘”  Íß ‘”  Íà ‘”  Íá ‘”  Íâ ‘”  Íã ‘”  Íä ‘”  Íå ‘”  Íæ ‘”  Íç ‘”  Íè ‘”  Íé ‘”  Íê ‘”  Íë ‘”  Íì ‘”  Íí ‘”  Íî ‘”  Íï ‘”  Íğ ‘”  Íñ ‘”  Íò ‘”  Íó ‘”  Íô ‘”  Íõ ‘”  Íö ‘”  Í÷ ‘”  Íø ‘”  Íù ‘”  Íú ‘”  Íû ‘”  Íü ‘”  Íı ‘”  Íş ‘”  Íÿ ‘”  Í  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í	 ‘”  Í
+ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ‘”  Í; ‘”  Í< ‘”  Í= ‘”  Í> ‘”  Í? ‘”  Í@ ‘”  ÍA ‘”  ÍB ‘”  ÍC ‘”  ÍD ‘”  ÍE ‘”  ÍF ‘”  ÍG ‘”  ÍH ‘”  ÍI ‘”  ÍJ ‘”  ÍK ‘”  ÍL ‘”  ÍM ‘”  ÍN ‘”  ÍO ‘”  ÍP ‘”  ÍQ ‘”  ÍR ‘”  ÍS ‘”  ÍT ‘”  ÍU ‘”  ÍV ‘”  ÍW ‘”  ÍX ‘”  ÍY ‘”  ÍZ ‘”  Í[ ‘”  Í\ ‘”  Í] ‘”  Í^ ‘”  Í_ ‘”  Í` ‘”  Ía ‘”  Íb ‘”  Íc ‘”  Íd ‘”  Íe ‘”  Íf ‘”  Íg ‘”  Íh ‘”  Íi ‘”  Íj ‘”  Ík ‘”  Íl ‘”  Ím ‘”  Ín ‘”  Ío ‘”  Íp ‘”  Íq ‘”  Ír ‘”  Ís ‘”  Ít ‘”  Íu ‘”  Ív ‘”  Íw ‘”  Íx ‘”  Íy ‘”  Íz ‘”  Í{ ‘”  Í| ‘”  Í} ‘”  Í~ ‘”  Í ‘”  Í€ ‘”  Í ‘”  Í‚ ‘”  Íƒ ‘”  Í„ ‘”  Í… ‘”  Í† ‘”  Í‡ ‘”  Íˆ ‘”  Í‰ ‘”  ÍŠ ‘”  Í‹ ‘”  ÍŒ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í‘ ‘”  Í’ ‘”  Í“ ‘”  Í” ‘”  Í• ‘”  Í– ‘”  Í— ‘”  Í˜ ‘”  Í™ ‘”  Íš ‘”  Í› ‘”  Íœ ‘”  Í ‘”  Í ‘”  ÍŸ ‘”  Í  ‘”  Í¡ ‘”  Í¢ ‘”  Í£ ‘”  Í¤ ‘”  Í¥ ‘”  Í¦ ‘”  Í§ ‘”  Í¨ ‘”  Í© ‘”  Íª ‘”  Í« ‘”  Í¬ ‘”  Í­ ‘”  Í® ‘”  Í¯ ‘”  Í° ‘”  Í± ‘”  Í² ‘”  Í³ ‘”  Í´ ‘”  Íµ ‘”  Í¶ ‘”  Í· ‘”  Í¸ ‘”  Í¹ ‘”  Íº ‘”  Í» ‘”  Í¼ ‘”  Í½ ‘”  Í¾ ‘”  Í¿ ‘”  ÍÀ ‘”  ÍÁ ‘”  ÍÂ ‘”  ÍÃ ‘”  ÍÄ ‘”  ÍÅ ‘”  ÍÆ ‘”  ÍÇ ‘”  ÍÈ ‘”  ÍÉ ‘”  ÍÊ ‘”  ÍË ‘”  ÍÌ ‘”  ÍÍ ‘”  ÍÎ ‘”  ÍÏ ‘”  ÍĞ ‘”  ÍÑ ‘”  ÍÒ ‘”  ÍÓ ‘”  ÍÔ ‘”  ÍÕ ‘”  ÍÖ ‘”  Í× ‘”  ÍØ ‘”  ÍÙ ‘”  ÍÚ ‘”  ÍÛ ‘”  ÍÜ ‘”  Íİ ‘”  ÍŞ ‘”  Íß ‘”  Íà ‘”  Íá ‘”  Íâ ‘”  Íã ‘”  Íä ‘”  Íå ‘”  Íæ ‘”  Íç ‘”  Íè ‘”  Íé ‘”  Íê ‘”  Íë ‘”  Íì ‘”  Íí ‘”  Íî ‘”  Íï ‘”  Íğ ‘”  Íñ ‘”  Íò ‘”  Íó ‘”  Íô ‘”  Íõ ‘”  Íö ‘”  Í÷ ‘”  Íø ‘”  Íù ‘”  Íú ‘”  Íû ‘”  Íü ‘”  Íı ‘”  Íş ‘”  Íÿ ‘”  Í  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í	 ‘”  Í
+ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ÔrI’§missing¦pluginÃ¦genAbcÂÔ  ÔrJ”²dynamicImportCache¹exportAllDeclarationCache»exportNamedDeclarationCache«importCache’ÔrK–¤type¥start£end«declarationªspecifiers¦source¶ExportNamedDeclarationÍó9ÍówÔrL™¤type¥start£end¢idªexpression©generator¥async¦params¤body³FunctionDeclarationÍó@ÍówÔrM”¤type¥start£end¤nameªIdentifierÍóIÍóW®getGameRecordsÂÂÂÔrN”¤type¥start£end¤body®BlockStatementÍóZÍów‘ÔrO”¤type¥start£end¨argument¯ReturnStatementÍóaÍótMªIdentifierÍóhÍós«gameRecordsÀK¶ExportNamedDeclarationÍóyÍó·L³FunctionDeclarationÍó€Íó·MªIdentifierÍó‰Íó™°clearGameRecordsÂÂÂN®BlockStatementÍóœÍó·‘ÔrP”¤type¥start£endªexpression³ExpressionStatementÍó£Íó´ÔrQ–¤type¥start£end¨operator¤left¥right´AssignmentExpressionÍó£Íó³¡=MªIdentifierÍó£Íó®«gameRecordsÔrR”¤type¥start£end¨elements¯ArrayExpressionÍó±Íó³À—ÔrS•¤type¥start£endªspecifiers¦source±ImportDeclarationÌ€Ì¢‘ÔrT”¤type¥start£end¥local¶ImportDefaultSpecifierÌ‡ÌMªIdentifierÌ‡Ì¦routerÔrU•¤type¥start£end¥value£raw§LiteralÌ“Ì¡¬@ohos.router®'@ohos.router'S±ImportDeclarationÌ¤ÌÛ‘ÔrV•¤type¥start£end¨imported¥local¯ImportSpecifierÌ­ÌºMªIdentifierÌ­Ìº­ScreenAdapterMªIdentifierÌ­Ìº­ScreenAdapterU§LiteralÌÂÌÚ¶../utils/ScreenAdapter¸'../utils/ScreenAdapter'S±ImportDeclarationÌİÍA”V¯ImportSpecifierÌæÌôMªIdentifierÌæÌî¨GamePageMªIdentifierÌòÌô¢GPV¯ImportSpecifierÌöÌüMªIdentifierÌöÌü¦CastUIMªIdentifierÌöÌü¦CastUIV¯ImportSpecifierÌşÍ
+MªIdentifierÌşÍ
+¬getSizeValueMªIdentifierÌşÍ
+¬getSizeValueV¯ImportSpecifierÍÍMªIdentifierÍÍ®getStringValueMªIdentifierÍÍ®getStringValueU§LiteralÍ"Í@¼../constants/LayoutConstants¾'../constants/LayoutConstants'S±ImportDeclarationÍCÍ–’V¯ImportSpecifierÍLÍ]MªIdentifierÍLÍ]±DeviceCastManagerMªIdentifierÍLÍ]±DeviceCastManagerV¯ImportSpecifierÍ_ÍrMªIdentifierÍ_Ír³CastConnectionStateMªIdentifierÍ_Ír³CastConnectionStateU§LiteralÍzÍ•¹../cast/DeviceCastManager»'../cast/DeviceCastManager'S±ImportDeclarationÍ˜ÍÚ‘V¯ImportSpecifierÍ¡Í´MªIdentifierÍ¡Í´³DistributedGameDataMªIdentifierÍ¡Í´³DistributedGameDataU§LiteralÍ¼ÍÙ»../cast/DistributedGameData½'../cast/DistributedGameData'S±ImportDeclarationÍÜÍ‘V¯ImportSpecifierÍåÍöMªIdentifierÍåÍö±DeviceSelectPanelMªIdentifierÍåÍö±DeviceSelectPanelU§LiteralÍşÍ¹../cast/DeviceSelectPanel»'../cast/DeviceSelectPanel'S±ImportDeclarationÍÍR‘V¯ImportSpecifierÍ%Í2MªIdentifierÍ%Í2­CastStatusBarMªIdentifierÍ%Í2­CastStatusBarU§LiteralÍ:ÍQµ../cast/CastStatusBar·'../cast/CastStatusBar'

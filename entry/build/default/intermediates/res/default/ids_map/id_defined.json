@@ -21,27 +21,63 @@
 			"id":	"0x01000004"
 		}, {
 			"type":	"string",
-			"name":	"module_desc",
+			"name":	"cast_button_text",
 			"id":	"0x01000005"
+		}, {
+			"type":	"string",
+			"name":	"cast_connect",
+			"id":	"0x01000006"
+		}, {
+			"type":	"string",
+			"name":	"cast_connected",
+			"id":	"0x01000007"
+		}, {
+			"type":	"string",
+			"name":	"cast_connecting",
+			"id":	"0x01000008"
+		}, {
+			"type":	"string",
+			"name":	"cast_disconnect",
+			"id":	"0x01000009"
+		}, {
+			"type":	"string",
+			"name":	"cast_discovering",
+			"id":	"0x0100000A"
+		}, {
+			"type":	"string",
+			"name":	"cast_no_device",
+			"id":	"0x0100000B"
+		}, {
+			"type":	"string",
+			"name":	"cast_select_device",
+			"id":	"0x0100000C"
+		}, {
+			"type":	"string",
+			"name":	"distributed_permission_reason",
+			"id":	"0x0100000D"
+		}, {
+			"type":	"string",
+			"name":	"module_desc",
+			"id":	"0x0100000E"
 		}, {
 			"type":	"color",
 			"name":	"start_window_background",
-			"id":	"0x01000006"
+			"id":	"0x0100000F"
 		}, {
 			"type":	"media",
 			"name":	"icon",
-			"id":	"0x01000007"
+			"id":	"0x01000010"
 		}, {
 			"type":	"media",
 			"name":	"startIcon",
-			"id":	"0x01000008"
+			"id":	"0x01000011"
 		}, {
 			"type":	"media",
 			"name":	"target_icon",
-			"id":	"0x01000009"
+			"id":	"0x01000012"
 		}, {
 			"type":	"profile",
 			"name":	"main_pages",
-			"id":	"0x0100000A"
+			"id":	"0x01000013"
 		}]
 }

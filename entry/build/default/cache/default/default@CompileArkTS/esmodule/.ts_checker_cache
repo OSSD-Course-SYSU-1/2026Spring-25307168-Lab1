@@ -23,7 +23,9 @@
       "mtimeMs": 1774582692000,
       "children": [],
       "parent": [
-        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\entryability\\EntryAbility.ets"
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\entryability\\EntryAbility.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceCastManager.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DistributedGameData.ets"
       ],
       "error": false
     },
@@ -591,7 +593,8 @@
         "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.base.d.ts"
       ],
       "parent": [
-        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.arkui.UIContext.d.ts"
+        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.arkui.UIContext.d.ts",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\utils\\ScreenAdapter.ets"
       ],
       "error": false
     },
@@ -1496,10 +1499,54 @@
       ],
       "error": false
     },
-    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\Index.ets": {
-      "mtimeMs": 1779192294403.7612,
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\utils\\ScreenAdapter.ets": {
+      "mtimeMs": 1781601338196.646,
       "children": [
-        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.router.d.ts"
+        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.mediaquery.d.ts"
+      ],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\Index.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\RecordPage.ets"
+      ],
+      "error": true,
+      "errorCodes": [
+        28007
+      ]
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\constants\\LayoutConstants.ets": {
+      "mtimeMs": 1781625361679.8071,
+      "children": [],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\Index.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceSelectPanel.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\CastStatusBar.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\RecordPage.ets"
+      ],
+      "error": false
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceCastManager.ets": {
+      "mtimeMs": 1781602745602.4558,
+      "children": [
+        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.hilog.d.ts"
+      ],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\Index.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceSelectPanel.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\CastStatusBar.ets"
+      ],
+      "error": false
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\Index.ets": {
+      "mtimeMs": 1782205744395.7656,
+      "children": [
+        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.router.d.ts",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\utils\\ScreenAdapter.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\constants\\LayoutConstants.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceCastManager.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\components\\ParticleBackground.ets"
       ],
       "parent": [],
       "error": true,
@@ -1507,10 +1554,48 @@
         28007
       ]
     },
-    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets": {
-      "mtimeMs": 1780394519848.6243,
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DistributedGameData.ets": {
+      "mtimeMs": 1781602141215.2856,
       "children": [
-        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.router.d.ts"
+        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.hilog.d.ts"
+      ],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets"
+      ],
+      "error": false
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceSelectPanel.ets": {
+      "mtimeMs": 1780998783247.4917,
+      "children": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceCastManager.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\constants\\LayoutConstants.ets"
+      ],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets"
+      ],
+      "error": false
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\CastStatusBar.ets": {
+      "mtimeMs": 1780998802906.1304,
+      "children": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceCastManager.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\constants\\LayoutConstants.ets"
+      ],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets"
+      ],
+      "error": false
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets": {
+      "mtimeMs": 1782206000479.175,
+      "children": [
+        "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.router.d.ts",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\utils\\ScreenAdapter.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\constants\\LayoutConstants.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceCastManager.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DistributedGameData.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\DeviceSelectPanel.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\cast\\CastStatusBar.ets"
       ],
       "parent": [
         "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\RecordPage.ets"
@@ -1521,10 +1606,12 @@
       ]
     },
     "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\RecordPage.ets": {
-      "mtimeMs": 1779789405322.641,
+      "mtimeMs": 1782206116268.8389,
       "children": [
         "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.router.d.ts",
-        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets"
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\GamePage.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\utils\\ScreenAdapter.ets",
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\constants\\LayoutConstants.ets"
       ],
       "parent": [],
       "error": true,
@@ -1997,6 +2084,17 @@
         "E:\\DevEco Studio\\sdk\\default\\openharmony\\ets\\api\\@ohos.security.cert.d.ts"
       ],
       "error": false
+    },
+    "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\components\\ParticleBackground.ets": {
+      "mtimeMs": 1782205647620.5864,
+      "children": [],
+      "parent": [
+        "E:\\lezihuawei\\target\\entry\\src\\main\\ets\\pages\\Index.ets"
+      ],
+      "error": true,
+      "errorCodes": [
+        2416
+      ]
     }
   }
 }
